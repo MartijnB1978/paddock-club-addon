@@ -23,6 +23,14 @@
     <div><h3>Race top 10</h3><ol class="mini">{% for i in range(1, 11) %}<li>{{ driver(res.race_pos.get(i), drivers, teams, true) }}</li>{% endfor %}</ol></div>
     <div><h3>Fastest lap</h3>{{ driver(res.fl.get(1), drivers, teams, true) }}
       <h3>Driver of the Day</h3>{{ driver(res.dotd.get(1), drivers, teams, true) }}
+      {% if votes and votes[0].pct %}
+      <ol class="votes" aria-label="Fan vote">
+        {% for v in votes %}<li><span class="vn">{{ driver(v.tla, drivers, teams) }}</span>
+          <span class="vbar"><span style="width:{{ (v.pct / votes[0].pct * 100)|round(1) }}%;--tc:#{{ (drivers.get(v.tla) or {}).get('colour') or '8d97aa' }}"></span></span>
+          <span class="vp">{{ '%g'|format(v.pct) }}%</span></li>{% endfor %}
+      </ol>
+      <p class="muted small">Fan vote, top {{ votes|length }}. <a href="{{ votes[0].link }}" target="_blank" rel="noopener">Source: formula1.com</a></p>
+      {% endif %}
       <h3>Fastest pit stop</h3>{{ team(res.fp.get(1), teams) }}</div>
   </div>
 </section>

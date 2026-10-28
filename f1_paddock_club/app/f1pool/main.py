@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, db, importer, mailer, reports, scoring, standings
+from . import auth, db, dotd, importer, mailer, reports, scoring, standings
 from .engine import Engine
 from .schedule import SCORED
 
@@ -540,7 +540,8 @@ def race(request: Request, event_id: int):
         rows.append({"user": usr, "pred": p, "per_slot": per_slot, "total": tot,
                      "pen": sum(x["points"] for x in pens[usr["id"]]), "pens": pens[usr["id"]]})
     rows.sort(key=lambda r: -(r["total"] - r["pen"]))
-    return render(request, "race.html", ev=ev, res=res, rows=rows, fields=fields, visible=visible,
+    votes = db.q("SELECT * FROM dotd_votes WHERE event_id=? ORDER BY rank", ev["id"])
+    return render(request, "race.html", ev=ev, res=res, rows=rows, fields=fields, visible=visible, votes=votes,
                   me=u, drivers=driver_map(ev["year"]), teams=team_map(ev["year"]),
                   sessions=sessions_of(ev["id"]), year=ev["year"],
                   season_preds=None)
@@ -691,6 +692,7 @@ def admin_event(request: Request, event_id: int):
                   users=db.q("SELECT * FROM users WHERE active=1 ORDER BY name"),
                   pens=db.q("SELECT p.*, u.name FROM penalties p JOIN users u ON u.id=p.user_id "
                             "WHERE event_id=?", event_id), fields=scoring.fields_for_event(ev),
+                  votes=db.q("SELECT * FROM dotd_votes WHERE event_id=? ORDER BY rank", event_id),
                   year=ev["year"])
 
 
@@ -727,6 +729,22 @@ async def admin_event_save(request: Request, event_id: int):
     elif action == "unpenalty":
         db.ex("DELETE FROM penalties WHERE id=? AND event_id=?", int(form.get("pid")), event_id)
         flash(request, "Penalty removed.")
+    elif action == "dotd_article":
+        link = (form.get("link") or "").strip()
+        if not link.startswith("https://www.formula1.com/"):
+            flash(request, "Paste the link of the Driver of the Day article on formula1.com.", "err")
+            return redirect(f"/admin/event/{event_id}")
+        try:
+            found = dotd.from_article(link, db.q("SELECT * FROM entrants WHERE event_id=?", event_id))
+        except Exception as exc:  # noqa: BLE001
+            found = None
+            flash(request, f"Could not read the article: {exc}", "err")
+            return redirect(f"/admin/event/{event_id}")
+        if not found:
+            flash(request, "No Driver of the Day vote found in that article.", "err")
+            return redirect(f"/admin/event/{event_id}")
+        engine.save_dotd(ev, found)
+        flash(request, f"Driver of the Day: {found['votes'][0]['name']}.")
     elif action == "refetch":
         db.ex("UPDATE sessions SET last_fetch=NULL WHERE event_id=?", event_id)
         engine.force("finalise")

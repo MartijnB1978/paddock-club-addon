@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from . import db, livetiming as lt, scoring, mailer
+from . import db, dotd, livetiming as lt, scoring, mailer
 from .f1auth import TokenManager
 from .schedule import DURATION, SCORED, sync as sync_schedule
 
@@ -83,6 +83,10 @@ class Engine:
             self.fallback_standings(year)
         if self.due("backfill", 3600):
             self.backfill_entrants(year)
+        if self.due("dotd_snapshot", 300):
+            self.dotd_snapshot(now)
+        if self.due("dotd", 600):
+            self.dotd_poll(now)
 
     # ------------------------------------------------------------ entrants
     def refresh_entrants(self, now):
@@ -139,6 +143,64 @@ class Engine:
                 self.save_entrants(ev, drivers)
         if rows:
             self.resolve_logos(year - 1)
+
+    # ------------------------------------------------------------ driver of the day
+    def dotd_snapshot(self, now):
+        """Remember which DotD articles exist before a race starts (so an old one is never used)."""
+        for s in db.q("SELECT s.event_id FROM sessions s JOIN events e ON e.id=s.event_id WHERE s.kind='R' "
+                      "AND e.imported=0 AND s.start_utc BETWEEN ? AND ?",
+                      db.iso(now - timedelta(minutes=5)), db.iso(now + timedelta(minutes=60))):
+            key = f"dotd_seen_{s['event_id']}"
+            if db.setting(key) is None:
+                try:
+                    db.set_setting(key, "\n".join(link for _t, link in dotd.feed_articles()))
+                except Exception as exc:  # noqa: BLE001
+                    log.info("dotd snapshot failed: %s", exc)
+
+    def dotd_poll(self, now):
+        rows = db.q("SELECT e.*, s.start_utc AS race_start FROM events e JOIN sessions s ON s.event_id=e.id "
+                    "AND s.kind='R' WHERE e.imported=0 AND e.cancelled=0 AND s.start_utc BETWEEN ? AND ? "
+                    "AND NOT EXISTS(SELECT 1 FROM dotd_votes v WHERE v.event_id=e.id) "
+                    "AND NOT EXISTS(SELECT 1 FROM results r WHERE r.event_id=e.id AND r.field='dotd' "
+                    "AND r.source='admin')",
+                    db.iso(now - timedelta(hours=50)), db.iso(now - timedelta(minutes=90)))
+        for ev in rows:
+            ents = db.q("SELECT * FROM entrants WHERE event_id=?", ev["id"])
+            seen = set((db.setting(f"dotd_seen_{ev['id']}") or "").split("\n")) - {""}
+            try:
+                found = dotd.find_for_race(ents, seen)
+            except Exception as exc:  # noqa: BLE001
+                log.info("dotd lookup failed: %s", exc)
+                found = None
+            if found:
+                self.save_dotd(ev, found)
+                continue
+            race_end = db.parse_iso(ev["race_start"]) + timedelta(minutes=DURATION["R"])
+            key = f"dotd_notified_{ev['id']}"
+            if now > race_end + timedelta(hours=6) and not db.setting(key) and \
+                    not db.q1("SELECT 1 FROM results WHERE event_id=? AND field='dotd'", ev["id"]):
+                db.set_setting(key, db.iso(now))
+                mailer.notify_admins(f"{ev['name']}: please enter Driver of the Day",
+                                     "F1 hasn't published the Driver of the Day article yet (or the app couldn't "
+                                     "read it). Please enter it on the admin page, or paste the article link "
+                                     f"there:\n\n{mailer.base_url()}/admin/event/{ev['id']}")
+
+    def save_dotd(self, ev, found):
+        votes = found["votes"]
+        with db.tx() as c:
+            c.execute("DELETE FROM dotd_votes WHERE event_id=?", (ev["id"],))
+            for i, v in enumerate(votes, start=1):
+                c.execute("INSERT INTO dotd_votes VALUES(?,?,?,?,?,?)",
+                          (ev["id"], i, v["tla"], v["name"], v["pct"], found["link"]))
+            admin = c.execute("SELECT 1 FROM results WHERE event_id=? AND field='dotd' AND source='admin'",
+                              (ev["id"],)).fetchone()
+            if not admin and not ev["frozen"]:
+                c.execute("INSERT OR REPLACE INTO results VALUES(?,?,?,?,?,?)",
+                          (ev["id"], "dotd", 1, votes[0]["tla"], "f1web", db.iso(db.now_utc())))
+        top = votes[0]
+        db.logmsg("info", f"Driver of the Day {ev['name']}: {top['name']}"
+                          + (f" ({top['pct']:g}%)" if top.get("pct") else ""))
+        self.bump()
 
     def copy_previous_entrants(self, ev):
         prev = db.q1("SELECT e.id FROM events e WHERE EXISTS(SELECT 1 FROM entrants x WHERE x.event_id=e.id) "
@@ -287,8 +349,6 @@ class Engine:
         ev = db.q1("SELECT * FROM events WHERE id=?", s["event_id"])
         missing = []
         res = scoring.load_results(ev["id"])
-        if not res.get("dotd"):
-            missing.append("Driver of the Day")
         if not res.get("fp"):
             missing.append("Fastest pit stop")
         if missing:

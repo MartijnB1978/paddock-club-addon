@@ -31,6 +31,20 @@
   </form>
   <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="linkbtn" name="action" value="refetch">Fetch official results again</button></form>
   {% endif %}
+  <h3>Driver of the Day</h3>
+  {% if votes %}
+  <p>{% for v in votes %}{{ v.name }}{% if v.pct %} {{ '%g'|format(v.pct) }}%{% endif %}{{ ', ' if not loop.last }}{% endfor %}
+    <br><span class="muted small">Read automatically from formula1.com.</span></p>
+  {% else %}
+  <p class="muted small">The app looks for F1's Driver of the Day article every 10 minutes for 48 hours after the race. If it doesn't find it, paste the article link here.</p>
+  {% endif %}
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="dotd_article">
+    <label>Link to the Driver of the Day article on formula1.com<input name="link" type="url" placeholder="https://www.formula1.com/en/latest/article/driver-of-the-day-…"></label>
+    <button class="btn small">Read article</button>
+  </form>
+  {% if false %}
+  {% endif %}
 </section>
 <section class="card">
   <h2>Penalties</h2>

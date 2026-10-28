@@ -210,3 +210,8 @@ label{display:flex;flex-direction:column;gap:4px;font-size:.92rem;color:var(--mu
 .champ tr.subrow th,.champ tr.subrow td{font-size:.85rem;color:var(--muted);padding-top:3px;padding-bottom:3px}
 .champ tr.subrow th{padding-left:2.4em;font-weight:400}
 section + section{margin-top:28px}
+.votes{list-style:none;margin:8px 0 4px;padding:0;max-width:360px}
+.votes li{display:grid;grid-template-columns:52px 1fr 48px;gap:8px;align-items:center;padding:2px 0}
+.vbar{height:8px;background:var(--raised);border-radius:4px;overflow:hidden}
+.vbar span{display:block;height:100%;background:var(--tc,#8d97aa);border-radius:4px}
+.vp{text-align:right;font-variant-numeric:tabular-nums;font-size:.9rem}
