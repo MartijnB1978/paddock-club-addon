@@ -215,3 +215,5 @@ section + section{margin-top:28px}
 .vbar{height:8px;background:var(--raised);border-radius:4px;overflow:hidden}
 .vbar span{display:block;height:100%;background:var(--tc,#8d97aa);border-radius:4px}
 .vp{text-align:right;font-variant-numeric:tabular-nums;font-size:.9rem}
+.panel .votes{max-width:none}
+.vh{margin:14px 0 2px;font-size:.85rem}

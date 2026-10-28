@@ -51,6 +51,14 @@
       {% if panel.extra.dotd %}<div><dt>Driver of the Day</dt><dd>{{ driver(panel.extra.dotd, drivers, teams) }}</dd></div>{% endif %}
     </dl>
     {% endif %}
+    {% if panel.votes %}
+    <h3 class="vh">Driver of the Day vote</h3>
+    <ol class="votes" aria-label="Driver of the Day fan vote">
+      {% for v in panel.votes %}<li><span class="vn">{{ driver(v.tla, drivers, teams) }}</span>
+        <span class="vbar"><span style="width:{{ (v.pct / panel.votes[0].pct * 100)|round(1) }}%;--tc:#{{ (drivers.get(v.tla) or {}).get('colour') or '8d97aa' }}"></span></span>
+        <span class="vp">{{ '%g'|format(v.pct) }}%</span></li>{% endfor %}
+    </ol>
+    {% endif %}
   {% else %}
     {% if nxt %}
     <header class="panel-head"><div><h2>{{ nxt.ev_name }}</h2><p class="muted">{{ nxt.name }}, {{ nxt.start_utc|localtime }}</p></div>

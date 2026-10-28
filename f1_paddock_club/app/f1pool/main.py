@@ -243,7 +243,9 @@ def live_panel():
     extra = {r["field"]: r["value"] for r in db.q(
         "SELECT field, value FROM results WHERE event_id=? AND field IN ('fl','fp','dotd') AND slot=1",
         s["event_id"])} if s["kind"] == "R" else {}
-    return {"session": s, "rows": rows, "extra": extra,
+    votes = db.q("SELECT * FROM dotd_votes WHERE event_id=? AND pct IS NOT NULL ORDER BY rank LIMIT 5",
+                 s["event_id"]) if s["kind"] == "R" else []
+    return {"session": s, "rows": rows, "extra": extra, "votes": votes,
             "is_live": bool(sid and sid == s["id"]), "status": engine.live_status}
 
 
