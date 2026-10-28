@@ -26,6 +26,30 @@
     s.addEventListener("change", paint); paint();
   });
 
+  // a driver can be picked only once within a top 10 / top 3 / championship list
+  var groups = {};
+  document.querySelectorAll("select.dsel").forEach(function (s) {
+    var m = s.name.match(/^(race_pos|sprint_pos|season)_\d+$/);
+    if (!m) return;
+    (groups[m[1]] = groups[m[1]] || []).push(s);
+  });
+  Object.keys(groups).forEach(function (g) {
+    var sels = groups[g];
+    function sync() {
+      var taken = {};
+      sels.forEach(function (s) { if (s.value) taken[s.value] = s; });
+      sels.forEach(function (s) {
+        Array.prototype.forEach.call(s.options, function (o) {
+          var blocked = o.value && taken[o.value] && taken[o.value] !== s;
+          o.disabled = !!blocked;
+          o.hidden = !!blocked;
+        });
+      });
+    }
+    sels.forEach(function (s) { s.addEventListener("change", sync); });
+    sync();
+  });
+
   // live standings: server-sent events -> refresh board with FLIP animation
   var board = document.getElementById("board");
   if (!board || !window.EventSource) return;
