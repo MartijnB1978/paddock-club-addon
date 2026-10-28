@@ -630,6 +630,9 @@ def commit_v2(pl):
                     c.execute("INSERT OR REPLACE INTO scores(user_id,event_id,year,points,detail) VALUES(?,?,?,?,?)",
                               (u, eid, year, e["points"][p["name"]], json.dumps({"imported": True})))
                 pred = e["preds"].get(p["name"], {})
+                if not e["played"] and c.execute("SELECT 1 FROM predictions WHERE user_id=? AND event_id=? "
+                                                 "LIMIT 1", (u, eid)).fetchone():
+                    continue    # never overwrite predictions made in the app for an open weekend
                 if e["played"] or pred:
                     c.execute("DELETE FROM predictions WHERE user_id=? AND event_id=?", (u, eid))
                 for f, slots in pred.items():
