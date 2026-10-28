@@ -62,18 +62,46 @@ def _similar(label, ev):
 
 
 def _map_labels(labels, events):
-    """Map Excel race labels (calendar order) onto calendar events."""
-    out, i = [], 0
-    for lab in labels:
-        window = events[i:i + 3]
-        if not window:
-            out.append(None)
+    """Map Excel race labels onto calendar events: by name first, by calendar order for the rest."""
+    events = sorted(events, key=lambda e: e["round"])
+    out = [None] * len(labels)
+    used = set()
+    keys = [_label_key(lab) for lab in labels]
+    for i, lab in enumerate(labels):
+        if keys.count(keys[i]) > 1:
+            continue        # e.g. "Italy GP" and "Italy GP 2": decide by order
+        best, bs = None, 0.0
+        for e in events:
+            if e["id"] in used:
+                continue
+            sc = _similar(lab, e)
+            if sc > bs:
+                best, bs = e, sc
+        if best and bs >= 0.9:
+            out[i] = best
+            used.add(best["id"])
+    for i in range(len(labels)):
+        if out[i]:
             continue
-        scores = [_similar(lab, e) for e in window]
-        j = next((k for k, sc in enumerate(scores) if sc >= 0.75), 0)
-        out.append(window[j])
-        i += j + 1
+        lo = max([out[j]["round"] for j in range(i) if out[j]] or [0])
+        hi = min([out[j]["round"] for j in range(i + 1, len(labels)) if out[j]] or [10_000])
+        cands = [e for e in events if e["id"] not in used and lo < e["round"] < hi]
+        if cands:
+            out[i] = cands[0]
+            used.add(cands[0]["id"])
     return out
+
+
+def _reset_import(c, year):
+    """Undo an earlier import of this season so a re-import starts clean."""
+    for (eid,) in c.execute("SELECT id FROM events WHERE year=? AND imported=1", (year,)).fetchall():
+        c.execute("DELETE FROM scores WHERE event_id=?", (eid,))
+        c.execute("DELETE FROM results WHERE event_id=? AND source='import'", (eid,))
+        c.execute("DELETE FROM predictions WHERE event_id=?", (eid,))
+        c.execute("DELETE FROM entrants WHERE event_id=? AND colour=''", (eid,))
+        c.execute("UPDATE sessions SET status='scheduled' WHERE event_id=? AND status='final'", (eid,))
+        c.execute("UPDATE events SET imported=0, frozen=0 WHERE id=?", (eid,))
+    c.execute("DELETE FROM season_scores WHERE year=?", (year,))
 
 
 class Drivers:
@@ -259,6 +287,7 @@ def commit(pl):
     year = pl["year"]
     ts = db.iso(db.now_utc())
     with db.tx() as c:
+        _reset_import(c, year)
         final = pl["season_final"]
         c.execute("INSERT OR IGNORE INTO seasons(year) VALUES(?)", (year,))
         c.execute("UPDATE seasons SET rules=?, imported=?, final=? WHERE year=?",
@@ -492,12 +521,8 @@ def plan_v2(wb, year):
             break
     # weekends that took place (a race result exists) or are still to come (in calendar)
     raced = [k for k in order if results.get(k, ("", {}))[1].get("race_pos")]
-    mapped = dict(zip(raced, _map_labels(raced, events)))
-    used = {e["id"] for e in mapped.values() if e}
-    rest_events = [e for e in events if e["id"] not in used and e["round"] > max(
-        [m["round"] for m in mapped.values() if m] or [0])]
-    upcoming = [k for k in order if k not in raced and not k.startswith(("bahrein", "bahrain", "saudi"))]
-    mapped.update(dict(zip(upcoming, _map_labels(upcoming, rest_events))))
+    keys = [k for k in order if k in raced or not k.startswith(("bahrein", "bahrain", "saudi"))]
+    mapped = dict(zip(keys, _map_labels(keys, events)))
 
     plan_events = []
     for k in order:
@@ -548,6 +573,7 @@ def commit_v2(pl):
     ts = db.iso(db.now_utc())
     final = pl["season_final"]
     with db.tx() as c:
+        _reset_import(c, year)
         c.execute("INSERT OR IGNORE INTO seasons(year) VALUES(?)", (year,))
         c.execute("UPDATE seasons SET rules='v2', imported=?, final=? WHERE year=?",
                   (1 if final else 0, 1 if final else 0, year))

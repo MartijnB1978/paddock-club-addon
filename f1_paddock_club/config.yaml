@@ -1,5 +1,5 @@
 name: Paddock Club F1
-version: "1.0.2"
+version: "1.0.3"
 slug: f1_paddock_club
 description: F1 prediction game with live standings, published through its own isolated Tailscale Funnel node
 url: https://github.com/MartijnB1978/paddock-club-addon

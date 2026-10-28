@@ -156,6 +156,12 @@ def save(year, events):
             if kinds:
                 c.execute(f"DELETE FROM sessions WHERE event_id=? AND kind NOT IN ({','.join('?' * len(kinds))}) "
                           "AND status='scheduled'", (eid, *kinds))
+        # number the weekends in race-date order (official data can list them out of order)
+        rows = c.execute("SELECT e.id FROM events e LEFT JOIN sessions s ON s.event_id=e.id AND s.kind='R' "
+                         "WHERE e.year=? ORDER BY e.cancelled, COALESCE(s.start_utc, '9999'), e.round",
+                         (year,)).fetchall()
+        for n, (eid,) in enumerate(rows, start=1):
+            c.execute("UPDATE events SET round=? WHERE id=?", (n, eid))
         for row in c.execute("SELECT id, name FROM events WHERE year=? AND cancelled=0 AND imported=0",
                              (year,)).fetchall():
             if row["id"] not in seen:
