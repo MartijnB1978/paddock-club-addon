@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block main %}
+<section class="card narrow">
+  <h1>{{ 'Welcome, ' ~ target.name if kind == 'invite' else 'New password' }}</h1>
+  <p class="muted">{{ 'Choose a password to join the game.' if kind == 'invite' else 'Choose a new password.' }} You sign in with <b>{{ target.name }}</b>{% if target.email %} or {{ target.email }}{% endif %}.</p>
+  <form method="post" action="/setpw" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="kind" value="{{ kind }}">
+    <label>Password (at least 8 characters)<input name="password" type="password" minlength="8" autocomplete="new-password" required></label>
+    <label>Same password again<input name="password2" type="password" minlength="8" autocomplete="new-password" required></label>
+    <button class="btn">Save password</button>
+  </form>
+</section>
+{% endblock %}

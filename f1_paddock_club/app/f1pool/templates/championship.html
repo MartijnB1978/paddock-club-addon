@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_macros.html" import driver %}
+{% block main %}
+<div class="page-head">
+  <div><h1>Championship prediction {{ year }}</h1>
+  <p class="muted">10 points for every driver in the exact championship position. Scored against the current standings{% if open_ %}; predictions stay hidden until {{ season_lock|localtime }}{% endif %}.</p></div>
+  {% if open_ %}<a class="btn" href="/predict">Make your prediction</a>{% endif %}
+</div>
+<div class="grid-wrap" tabindex="0">
+<table class="grid preds">
+  <thead><tr><th class="sticky">Player</th><th class="num">Points</th>{% for i in range(1, 11) %}<th>P{{ i }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  <tr class="standings-row"><th class="sticky">Standings now</th><td></td>{% for i in range(1, 11) %}<td class="cell">{{ driver(stand.get(i), drivers, teams) }}</td>{% endfor %}</tr>
+  {% for r in rows %}
+  <tr class="{{ 'mine' if r.user.id == user.id }}"><th class="sticky">{{ r.user.name }}</th><td class="num strong">{{ r.total }}</td>
+    {% for i in range(1, 11) %}{% set pts = r.per_slot.get(i) %}
+    <td class="cell {{ 'pts5' if pts else ('pts0' if pts is not none) }}">{% if not open_ or r.user.id == user.id %}{{ driver(r.pred.get(i), drivers, teams) }}{% else %}<span class="hidden">•••</span>{% endif %}</td>
+    {% endfor %}</tr>
+  {% else %}
+  <tr><td colspan="12" class="muted">No championship predictions for {{ year }}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

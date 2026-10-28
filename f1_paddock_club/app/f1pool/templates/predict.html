@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "_macros.html" import driver, team %}
+{% macro driver_select(name, selected, disabled, label) -%}
+<select name="{{ name }}" {{ 'disabled' if disabled }} aria-label="{{ label }}" class="dsel">
+  <option value="">–</option>
+  {% for tm in teams %}
+  <optgroup label="{{ tm }}">
+    {% for d in drivers if d.team == tm %}
+    <option value="{{ d.tla }}" data-colour="{{ d.colour }}" {{ 'selected' if selected == d.tla }}>{{ d.tla }}  {{ d.name }}</option>
+    {% endfor %}
+  </optgroup>
+  {% endfor %}
+</select>
+{%- endmacro %}
+{% macro lockline(f) -%}
+  {% set t = locks[f] %}
+  {% if t is none %}<span class="lock closed">No session</span>
+  {% elif now >= t %}<span class="lock closed">Closed</span>
+  {% else %}<span class="lock open">Open until <time data-countdown="{{ t.isoformat() }}">{{ t|localtime }}</time></span>{% endif %}
+{%- endmacro %}
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1>{{ ev.name }}</h1>
+    <p class="muted">Round {{ ev.round }}, {{ ev.location }}{% if ev.sprint %}. Sprint weekend{% endif %}.</p>
+  </div>
+  {% if upcoming|length > 1 %}
+  <form method="get" onsubmit="location='/predict/'+this.e.value;return false" class="yearpick">
+    <label class="sr" for="e">Race weekend</label>
+    <select id="e" name="e" onchange="this.form.onsubmit()">{% for u in upcoming %}<option value="{{ u.id }}" {{ 'selected' if u.id == ev.id }}>{{ u.name }}</option>{% endfor %}</select>
+  </form>
+  {% endif %}
+</div>
+
+{% if not drivers %}
+<p class="card">The entry list for this weekend isn't published yet. It appears automatically after F1 releases it (at the latest when first practice starts).</p>
+{% else %}
+<form method="post" action="/predict/{{ ev.id }}" class="predict">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if ev.sprint %}
+  <fieldset class="card">
+    <legend>Sprint qualifying</legend>{{ lockline('sprint_pole') }}
+    {% set dis = locks.sprint_pole is none or now >= locks.sprint_pole %}
+    <div class="slots one"><label><span>Sprint pole</span>{{ driver_select('sprint_pole_1', mine.sprint_pole[1] if mine.sprint_pole else '', dis, 'Sprint pole') }}</label></div>
+  </fieldset>
+  <fieldset class="card">
+    <legend>Sprint</legend>{{ lockline('sprint_pos') }}
+    {% set dis = locks.sprint_pos is none or now >= locks.sprint_pos %}
+    <div class="slots">
+      {% for i in range(1, 4) %}<label><span class="p">P{{ i }}</span>{{ driver_select('sprint_pos_' ~ i, mine.sprint_pos[i] if mine.sprint_pos else '', dis, 'Sprint P' ~ i) }}</label>{% endfor %}
+    </div>
+  </fieldset>
+  {% endif %}
+  <fieldset class="card">
+    <legend>Qualifying</legend>{{ lockline('pole') }}
+    {% set dis = locks.pole is none or now >= locks.pole %}
+    <div class="slots one"><label><span>Pole position</span>{{ driver_select('pole_1', mine.pole[1] if mine.pole else '', dis, 'Pole position') }}</label></div>
+  </fieldset>
+  <fieldset class="card">
+    <legend>Race</legend>{{ lockline('race_pos') }}
+    {% set dis = locks.race_pos is none or now >= locks.race_pos %}
+    <div class="slots">
+      {% for i in range(1, 11) %}<label><span class="p">P{{ i }}</span>{{ driver_select('race_pos_' ~ i, mine.race_pos[i] if mine.race_pos else '', dis, 'Race P' ~ i) }}</label>{% endfor %}
+    </div>
+    <div class="slots extras3">
+      <label><span>Fastest lap</span>{{ driver_select('fl_1', mine.fl[1] if mine.fl else '', dis, 'Fastest lap') }}</label>
+      <label><span>Driver of the Day</span>{{ driver_select('dotd_1', mine.dotd[1] if mine.dotd else '', dis, 'Driver of the Day') }}</label>
+      <label><span>Fastest pit stop</span>
+        <select name="fp_1" {{ 'disabled' if dis }} aria-label="Fastest pit stop team">
+          <option value="">–</option>
+          {% for tm in teams %}<option {{ 'selected' if mine.fp and mine.fp[1] == tm }}>{{ tm }}</option>{% endfor %}
+        </select></label>
+    </div>
+  </fieldset>
+  <div class="actions"><button class="btn">Save predictions</button>
+    <span class="muted">You can change open predictions until each deadline.</span></div>
+</form>
+{% endif %}
+
+{% if season_open %}
+<form method="post" action="/season/{{ year }}" class="card predict">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="/predict/{{ ev.id }}">
+  <h2>Championship top 10, {{ year }}</h2>
+  <span class="lock open">Open until <time data-countdown="{{ season_lock.isoformat() }}">{{ season_lock|localtime }}</time></span>
+  <div class="slots">
+  {% for i in range(1, 11) %}<label><span class="p">P{{ i }}</span>{{ driver_select('season_' ~ i, season_pick.get(i, ''), false, 'Championship P' ~ i) }}</label>{% endfor %}
+  </div>
+  <div class="actions"><button class="btn">Save championship prediction</button></div>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="/static/app.js?v=3"></script>{% endblock %}

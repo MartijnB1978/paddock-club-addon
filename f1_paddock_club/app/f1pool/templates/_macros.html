@@ -1,0 +1,30 @@
+{% macro team_logo(team, teams, size=20) -%}
+  {%- set t = teams.get(team) if team else none -%}
+  {%- if t and t.logo_url -%}
+  <img class="tlogo" src="{{ t.logo_url }}" alt="{{ team }}" width="{{ size }}" height="{{ size }}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'tbadge',textContent:'{{ team[:2]|upper }}',style:'--tc:#{{ t.colour or '667' }}'}))">
+  {%- elif team -%}
+  <span class="tbadge" style="--tc:#{{ (t.colour if t else '') or '667' }}">{{ team[:2]|upper }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro driver(tla, drivers, teams, full=false) -%}
+  {%- set d = drivers.get(tla) if tla else none -%}
+  {%- if d -%}
+  <span class="drv" style="--tc:#{{ d.colour or (teams.get(d.team).colour if teams.get(d.team) else '') or '667' }}" title="{{ d.name }} – {{ d.team }}">
+    <span class="stripe"></span><b>{{ d.tla }}</b>{% if full %}<span class="dname">{{ d.name }}</span>{{ team_logo(d.team, teams, 18) }}{% endif %}
+  </span>
+  {%- elif tla -%}
+  <span class="drv"><span class="stripe"></span><b>{{ tla }}</b></span>
+  {%- else -%}<span class="muted">–</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro team(name, teams) -%}
+  {%- if name -%}
+  {%- set t = teams.get(name) -%}
+  <span class="drv team" style="--tc:#{{ (t.colour if t else '') or '667' }}">{{ team_logo(name, teams, 18) }}<b>{{ name }}</b></span>
+  {%- else -%}<span class="muted">–</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro value(field, v, drivers, teams) -%}
+  {%- if field == 'fp' -%}{{ team(v, teams) }}{%- else -%}{{ driver(v, drivers, teams) }}{%- endif -%}
+{%- endmacro %}

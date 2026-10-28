@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Admin</h1>
+{% if invite_links %}
+<section class="card notice">
+  <h2>Invite link for {{ invite_links.name }}</h2>
+  <p>{{ 'E-mailed. ' if invite_links.sent }}You can also send this link yourself (valid 14 days):</p>
+  <input class="copy" readonly value="{{ invite_links.link }}" onclick="this.select()">
+</section>
+{% endif %}
+
+<div class="two">
+<section class="card">
+  <h2>Data connection</h2>
+  <dl class="kv">
+    <dt>F1 account</dt><dd>{{ 'Configured' if status.f1_account else 'Not configured (add-on options)' }}</dd>
+    <dt>F1 TV token</dt><dd>{% if status.token_valid %}Valid until {{ status.token_expires }}{% else %}<span class="warn">None{% if status.auth_error %}: {{ status.auth_error }}{% endif %}</span>{% endif %}</dd>
+    <dt>Live timing</dt><dd>{{ status.live }}{% if status.live_last_msg %}, last data {{ status.live_last_msg }}{% endif %}</dd>
+    <dt>Calendar sync</dt><dd>{{ sync.at|localtime if sync.at else 'not yet' }}{% if sync.at %}, {{ sync.events }} weekends{% if sync.official_index %}, official F1 timing index{% endif %}{% endif %}</dd>
+    <dt>E-mail</dt><dd>{{ 'Gmail configured' if smtp else 'Not configured: invite links must be sent by hand' }}</dd>
+  </dl>
+  <form method="post" action="/admin/settings" class="row-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn ghost" name="action" value="sync">Sync with F1 now</button>
+    <button class="btn ghost" name="action" value="relogin">Sign in to F1 again</button>
+  </form>
+  <form method="post" action="/admin/settings" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Public address of this site (used in e-mails)<input name="base_url" value="{{ base_url }}" placeholder="https://f1.your-tailnet.ts.net"></label>
+    <button class="btn small">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Players</h2>
+  <table class="list">
+    {% for u in users %}
+    <tr class="{{ 'inactive' if not u.active }}">
+      <td><b>{{ u.name }}</b>{% if u.is_admin %} <span class="tag">admin</span>{% endif %}<br>
+        <form method="post" action="/admin/user" class="inline-email"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="user_id" value="{{ u.id }}"><input type="hidden" name="action" value="email">
+        <input name="email" type="email" value="{{ u.email or '' }}" placeholder="e-mail" aria-label="E-mail for {{ u.name }}"><button class="linkbtn">Save</button></form>
+        <span class="muted small">{{ 'Password set' if u.pw_hash else 'No password yet' }}</span></td>
+      <td class="acts">
+        <form method="post" action="/admin/user"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="user_id" value="{{ u.id }}">
+          <button class="linkbtn" name="action" value="invite">{{ 'New link' if u.pw_hash else 'Invite' }}</button>
+          <button class="linkbtn" name="action" value="toggle_admin">{{ 'Remove admin' if u.is_admin else 'Make admin' }}</button>
+          {% if u.active %}<button class="linkbtn" name="action" value="deactivate">Deactivate</button>{% else %}<button class="linkbtn" name="action" value="activate">Activate</button>{% endif %}
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <form method="post" action="/admin/user" class="stack add">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="create">
+    <h3>Add a player</h3>
+    <label>Name<input name="name" required></label>
+    <label>E-mail<input name="email" type="email"></label>
+    <button class="btn small">Add and invite</button>
+  </form>
+</section>
+</div>
+
+<section class="card">
+  <h2>Race weekends {{ year }}</h2>
+  <p class="muted">Open a weekend to enter Driver of the Day, correct a result or give a penalty.</p>
+  <ul class="cal compact">
+    {% for e in events %}<li class="{{ 'done' if e.frozen or e.imported }}"><span class="rnd">{{ e.round }}</span><a href="/admin/event/{{ e.id }}">{{ e.name }}</a>
+      <span class="state">{% if e.cancelled %}Cancelled{% elif e.imported %}From Excel{% elif e.frozen %}Frozen{% endif %}</span></li>{% endfor %}
+  </ul>
+  <p><a class="btn ghost" href="/admin/import">Import a season from Excel</a></p>
+</section>
+
+<section class="card">
+  <h2>Activity</h2>
+  <ul class="log">{% for l in logs %}<li class="{{ l.level }}"><time>{{ l.ts|localtime('%d %b %H:%M') }}</time> {{ l.msg }}</li>{% else %}<li class="muted">Nothing yet.</li>{% endfor %}</ul>
+</section>
+{% endblock %}

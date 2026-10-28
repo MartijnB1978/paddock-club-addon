@@ -1,0 +1,40 @@
+name: Paddock Club F1
+version: "1.0.1"
+slug: f1_paddock_club
+description: F1 prediction game with live standings, published through its own isolated Tailscale Funnel node
+url: https://github.com/MartijnB1978/paddock-club-addon
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: application
+boot: auto
+homeassistant_api: false
+hassio_api: false
+host_network: false
+ports:
+  8080/tcp: null
+ports_description:
+  8080/tcp: Optional direct LAN access (leave empty; players use the Funnel address)
+options:
+  admin_name: Martijn
+  admin_email: ""
+  f1_username: ""
+  f1_password: ""
+  smtp_user: ""
+  smtp_password: ""
+  tailscale_authkey: ""
+  tailscale_hostname: f1
+  base_url: ""
+  timezone: Europe/Amsterdam
+schema:
+  admin_name: str
+  admin_email: email?
+  f1_username: str?
+  f1_password: password?
+  smtp_user: str?
+  smtp_password: password?
+  tailscale_authkey: password?
+  tailscale_hostname: str
+  base_url: url?
+  timezone: str

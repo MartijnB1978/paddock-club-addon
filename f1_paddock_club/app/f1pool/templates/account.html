@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block main %}
+<section class="card narrow">
+  <h1>Your account</h1>
+  <p class="muted">Signed in as <b>{{ user.name }}</b>{% if user.email %} ({{ user.email }}){% endif %}.</p>
+  <form method="post" action="/account" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Current password<input name="current" type="password" autocomplete="current-password" required></label>
+    <label>New password<input name="password" type="password" minlength="8" autocomplete="new-password" required></label>
+    <label>New password again<input name="password2" type="password" minlength="8" autocomplete="new-password" required></label>
+    <button class="btn">Change password</button>
+  </form>
+</section>
+{% endblock %}

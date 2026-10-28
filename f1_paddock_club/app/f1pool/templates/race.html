@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_macros.html" import driver, team, value %}
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1>{{ ev.name }}</h1>
+    <p class="muted">Round {{ ev.round }}, {{ ev.location }}.
+      {% if ev.imported %}Imported from the Excel; points as awarded there.
+      {% elif ev.frozen %}Final, points are frozen.
+      {% else %}Points are provisional until 48 hours after the race.{% endif %}</p>
+  </div>
+  {% if user.is_admin %}<a class="btn ghost" href="/admin/event/{{ ev.id }}">Edit results</a>{% endif %}
+</div>
+
+<section class="results card">
+  <h2>Results</h2>
+  <div class="res-grid">
+    {% if ev.sprint %}
+    <div><h3>Sprint pole</h3>{{ driver(res.sprint_pole.get(1), drivers, teams, true) }}</div>
+    <div><h3>Sprint top 3</h3><ol class="mini">{% for i in range(1, 4) %}<li>{{ driver(res.sprint_pos.get(i), drivers, teams, true) }}</li>{% endfor %}</ol></div>
+    {% endif %}
+    <div><h3>Pole position</h3>{{ driver(res.pole.get(1), drivers, teams, true) }}</div>
+    <div><h3>Race top 10</h3><ol class="mini">{% for i in range(1, 11) %}<li>{{ driver(res.race_pos.get(i), drivers, teams, true) }}</li>{% endfor %}</ol></div>
+    <div><h3>Fastest lap</h3>{{ driver(res.fl.get(1), drivers, teams, true) }}
+      <h3>Driver of the Day</h3>{{ driver(res.dotd.get(1), drivers, teams, true) }}
+      <h3>Fastest pit stop</h3>{{ team(res.fp.get(1), teams) }}</div>
+  </div>
+</section>
+
+<h2>Predictions</h2>
+<div class="grid-wrap" tabindex="0" aria-label="Predictions per player, scrolls sideways">
+<table class="grid preds">
+  <thead><tr>
+    <th class="sticky">Player</th><th class="num">Points</th>
+    {% for f in fields %}
+      {% if f == 'race_pos' %}{% for i in range(1, 11) %}<th>P{{ i }}</th>{% endfor %}
+      {% elif f == 'sprint_pos' %}{% for i in range(1, 4) %}<th>S{{ i }}</th>{% endfor %}
+      {% else %}<th>{{ {'pole':'Pole','fl':'FL','dotd':'DotD','fp':'Pit','sprint_pole':'S‑pole'}[f] }}</th>{% endif %}
+    {% endfor %}
+  </tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr class="{{ 'mine' if r.user.id == me.id }}">
+    <th class="sticky">{{ r.user.name }}</th>
+    <td class="num strong">{{ r.total - r.pen }}{% if r.pen %}<small class="pen" title="{% for p in r.pens %}{{ p.reason }} ({{ p.points }}) {% endfor %}">−{{ r.pen }}</small>{% endif %}</td>
+    {% for f in fields %}
+      {% set n = 10 if f == 'race_pos' else (3 if f == 'sprint_pos' else 1) %}
+      {% for i in range(1, n + 1) %}
+        {% set v = r.pred.get(f, {}).get(i) %}
+        {% set pts = r.per_slot.get((f, i)) %}
+        <td class="cell {{ 'pts' ~ pts if pts is not none }}">
+          {% if visible[f] or r.user.id == me.id %}{% if v %}{{ value(f, v, drivers, teams) }}{% else %}<span class="muted">–</span>{% endif %}
+          {% else %}<span class="hidden" title="Visible after the deadline">•••</span>{% endif %}
+        </td>
+      {% endfor %}
+    {% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="legend"><span class="cell pts3">3</span> right driver, right place <span class="cell pts1">1</span> right driver in the top 10 <span class="cell pts5">5</span> bonus pick right. Others' picks show once each deadline has passed.</p>
+{% endblock %}

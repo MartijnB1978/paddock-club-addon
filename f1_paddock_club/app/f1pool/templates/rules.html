@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block main %}
+<article class="card prose">
+  <h1>How the game works</h1>
+  <p>Predict every qualifying, sprint and race before it starts. Each part closes at the official start time of its session, so you can still change your race picks after qualifying.</p>
+  <h2>Race</h2>
+  <table class="rules">
+    <tr><td>Driver in the right position (top 10)</td><td class="num">{{ r.race_exact }}</td></tr>
+    <tr><td>Driver in the top 10, but in another position</td><td class="num">{{ r.race_in_top10 }}</td></tr>
+    <tr><td>Pole position</td><td class="num">{{ r.pole }}</td></tr>
+    <tr><td>Fastest lap</td><td class="num">{{ r.fl }}</td></tr>
+    <tr><td>Driver of the Day</td><td class="num">{{ r.dotd }}</td></tr>
+    <tr><td>Fastest pit stop (team)</td><td class="num">{{ r.fp }}</td></tr>
+  </table>
+  <h2>Sprint weekends</h2>
+  <table class="rules">
+    <tr><td>Sprint pole</td><td class="num">{{ r.sprint_pole }}</td></tr>
+    <tr><td>Sprint top 3, driver in the right position</td><td class="num">{{ r.sprint_exact }}</td></tr>
+  </table>
+  <h2>Championship</h2>
+  <table class="rules">
+    <tr><td>Before the first race: drivers' championship top 10, per driver in the exact position</td><td class="num">{{ r.season_exact }}</td></tr>
+  </table>
+  <h2>Good to know</h2>
+  <ul>
+    <li>No prediction, no points.</li>
+    <li>The admin can give a penalty for a late entry.</li>
+    <li>Results come from Formula 1's official timing. Driver of the Day is entered by the admin after F1 announces it.</li>
+    <li>Results can still change for 48 hours after the race (stewards' decisions). After that the weekend is frozen.</li>
+    <li>Equal points at the end: the player who had the best weekend score most often wins.</li>
+    <li>Everyone's picks become visible once the deadline of that part has passed.</li>
+  </ul>
+</article>
+{% endblock %}

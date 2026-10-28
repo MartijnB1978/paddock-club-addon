@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="home-head">
+  <h1>Standings {{ year }}</h1>
+  {% if years|length > 1 %}
+  <form method="get" class="yearpick"><label class="sr" for="y">Season</label>
+    <select id="y" name="year" onchange="this.form.submit()">{% for y in years %}<option {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}</select>
+  </form>
+  {% endif %}
+  {% if deadlines %}
+  <p class="next">Next deadline: <b>{{ deadlines[0].ev_name }}, {{ deadlines[0].name }}</b>
+    <time data-countdown="{{ deadlines[0].start_utc }}">{{ deadlines[0].start_utc|localtime }}</time></p>
+  {% endif %}
+</div>
+<div id="board" data-year="{{ year }}">{% include "_board.html" %}</div>
+{% if user and deadlines %}
+<section class="deadlines">
+  <h2>Prediction deadlines</h2>
+  <ul>
+    {% for d in deadlines %}
+    <li><a href="/predict/{{ d.ev_id }}">{{ d.ev_name }}</a><span>{{ d.name }}</span><time>{{ d.start_utc|localtime }}</time></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="/static/app.js?v=3"></script>{% endblock %}

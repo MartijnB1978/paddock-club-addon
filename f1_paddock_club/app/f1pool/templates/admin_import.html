@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Import from Excel</h1>
+{% if not preview %}
+<section class="card narrow">
+  <p>Upload the season workbook. You'll see how the races match the calendar before anything is saved. Imported weekends keep exactly the points from the Excel.</p>
+  <form method="post" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Season<input name="year" type="number" value="{{ year }}" min="2018" max="2100" required></label>
+    <label>Workbook (.xlsx)<input name="file" type="file" accept=".xlsx" required></label>
+    <button class="btn">Check file</button>
+  </form>
+</section>
+{% else %}
+<section class="card">
+  <h2>{{ preview.year }}: {{ preview.events|length }} weekends, {{ preview.players|length }} players</h2>
+  <p class="muted">{% if preview.season_final %}Season complete: the championship-prediction points are taken from the Excel.{% else %}Season in progress: championship predictions are imported and scored live; the remaining races are played in the app with the new rules.{% endif %}</p>
+  <table class="list">
+    <thead><tr><th>In the Excel</th><th>Calendar</th><th>Result sheet</th><th>Winner</th><th>Status</th></tr></thead>
+    {% for e in preview.events %}
+    <tr class="{{ 'warn' if not e.event_id }}"><td>{{ e.label }}</td><td>{{ e.event_name }}</td><td>{{ e.sheet or '–' }}</td>
+      <td>{{ e.results.race_pos.get(1, '–') if e.results.race_pos else '–' }}</td>
+      <td>{% if e.played is not defined or e.played %}Points from Excel{% else %}Predictions only, scored by the app{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  <h3>Players</h3>
+  <table class="list">
+    <thead><tr><th>Player</th><th class="num">Races</th><th class="num">Championship</th><th class="num">Total</th><th></th></tr></thead>
+    {% for p in preview.players %}{% set tot = (p.race_pts|select('number')|sum) + (p.season_pts or 0) %}
+    <tr><td>{{ p.name }}</td><td class="num">{{ p.race_pts|select('number')|sum }}</td><td class="num">{{ p.season_pts or 0 }}</td><td class="num">{{ tot }}</td>
+      <td class="muted small">{% if p.excel_total is defined and p.excel_total is not none and p.excel_total != tot %}Excel TOTAL column says {{ p.excel_total }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  <form method="post" action="/admin/import/commit" class="row-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="year" value="{{ preview.year }}">
+    <button class="btn">Import {{ preview.year }}</button> <a href="/admin/import">Cancel</a>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

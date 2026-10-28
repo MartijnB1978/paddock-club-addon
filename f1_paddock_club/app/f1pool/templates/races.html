@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="page-head">
+  <h1>Races {{ year }}</h1>
+  {% if years|length > 1 %}
+  <form method="get" class="yearpick"><label class="sr" for="y">Season</label>
+    <select id="y" name="year" onchange="this.form.submit()">{% for y in years %}<option {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}</select></form>
+  {% endif %}
+</div>
+<div class="grid-wrap" tabindex="0" aria-label="Points per race, scrolls sideways">
+<table class="grid">
+  <thead><tr>
+    <th class="sticky">Player</th><th class="num">Total</th><th class="num" title="Championship prediction">Champ.</th>
+    {% for e in events %}<th class="num ev {{ 'live' if e.id == live_ev }}"><a href="/race/{{ e.id }}" title="{{ e.name }}">{{ e.name|short }}</a></th>{% endfor %}
+  </tr></thead>
+  <tbody>
+  {% for r in board %}
+    <tr><th class="sticky">{{ r.rank }}. {{ r.name }}</th><td class="num strong">{{ r.total }}</td><td class="num">{{ r.season }}</td>
+    {% for e in events %}{% set v = r.events.get(e.id) %}
+      <td class="num {{ 'best' if v is not none and v == best.get(e.id) and v > 0 }}">{{ v if v is not none else '' }}</td>
+    {% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted small">Purple marks the best score of each weekend; the most weekend wins decides a tie.</p>
+<h2>Calendar</h2>
+<ul class="cal">
+{% for e in events %}
+  {% set r = sess[e.id].get('R') %}
+  <li class="{{ 'done' if e.frozen or e.imported }}">
+    <span class="rnd">{{ e.round }}</span>
+    <a href="/race/{{ e.id }}">{{ e.name }}</a>
+    <span class="muted">{{ r.start_utc|localtime('%d %b') if r else '' }}{% if e.sprint %}, sprint{% endif %}</span>
+    <span class="state">{% if e.imported %}From Excel{% elif e.frozen %}Final{% elif e.id == live_ev %}In progress{% endif %}</span>
+  </li>
+{% endfor %}
+</ul>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% from "_macros.html" import driver, team %}
+<div id="board-inner">
+<section class="tower" aria-label="Players standings">
+  <div class="tower-head">
+    <span>Pos</span><span>Player</span><span class="num">Points</span><span class="num gap">Gap</span>
+  </div>
+  <ol class="rows">
+  {% set leader = board[0].total if board else 0 %}
+  {% for r in board %}
+    {% set evpts = r.events.get(live_ev, 0) if live_ev else none %}
+    <li class="row {{ 'p1' if r.rank == 1 }}" data-id="{{ r.user_id }}">
+      <span class="pos">{{ r.rank }}</span>
+      <span class="name">{{ r.name }}
+        {% if r.move > 0 %}<span class="mv up" title="Up {{ r.move }} this weekend">▲{{ r.move }}</span>
+        {% elif r.move < 0 %}<span class="mv down" title="Down {{ -r.move }} this weekend">▼{{ -r.move }}</span>{% endif %}
+      </span>
+      <span class="num pts">{{ r.total }}{% if evpts %}<small class="wk" title="Points this weekend">+{{ evpts }}</small>{% endif %}</span>
+      <span class="num gap">{% if r.rank == 1 %}<span class="lead">Leader</span>{% else %}−{{ leader - r.total }}{% endif %}</span>
+    </li>
+  {% else %}
+    <li class="empty">No players yet. The admin can invite players from the Admin page.</li>
+  {% endfor %}
+  </ol>
+</section>
+
+<section class="panel live" aria-label="Session">
+  {% if panel %}
+    {% set s = panel.session %}
+    <header class="panel-head">
+      <div>
+        <h2>{{ s.ev_name }}</h2>
+        <p class="muted">{{ s.name }}, {{ s.start_utc|localtime }}</p>
+      </div>
+      {% if panel.is_live %}<span class="badge live-dot">Live</span>
+      {% elif s.status == 'final' %}<span class="badge">Official</span>
+      {% else %}<span class="badge">Provisional</span>{% endif %}
+    </header>
+    {% if panel.rows %}
+    <ol class="order">
+      {% for r in panel.rows[:10] %}
+      <li><span class="p">{{ r.slot }}</span>{{ driver(r.value, drivers, teams, true) }}</li>
+      {% endfor %}
+    </ol>
+    {% else %}
+      <p class="muted pad">Waiting for timing data.</p>
+    {% endif %}
+    {% if panel.extra %}
+    <dl class="extras">
+      {% if panel.extra.fl %}<div><dt>Fastest lap</dt><dd>{{ driver(panel.extra.fl, drivers, teams) }}</dd></div>{% endif %}
+      {% if panel.extra.fp %}<div><dt>Fastest pit stop</dt><dd>{{ team(panel.extra.fp, teams) }}</dd></div>{% endif %}
+      {% if panel.extra.dotd %}<div><dt>Driver of the Day</dt><dd>{{ driver(panel.extra.dotd, drivers, teams) }}</dd></div>{% endif %}
+    </dl>
+    {% endif %}
+  {% else %}
+    <p class="muted pad">The latest session appears here once the season is under way.</p>
+  {% endif %}
+</section>
+</div>

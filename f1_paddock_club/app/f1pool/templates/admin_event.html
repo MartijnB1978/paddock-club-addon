@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="page-head">
+  <div><h1>{{ ev.name }}</h1>
+  <p class="muted">{% if ev.imported %}Imported from Excel, read-only.{% elif ev.frozen %}Frozen; results are final.{% else %}Results update automatically from F1 until 48 hours after the race. Anything you set here wins over the automatic value.{% endif %}</p></div>
+  <a class="btn ghost" href="/race/{{ ev.id }}">View weekend</a>
+</div>
+<div class="two">
+<section class="card">
+  <h2>Results</h2>
+  <dl class="kv">
+    {% for kind in ['SQ','S','Q','R'] if sessions.get(kind) %}{% set s = sessions[kind] %}
+      <dt>{{ s.name }}</dt><dd>{{ s.start_utc|localtime }}, {{ s.status }}</dd>
+    {% endfor %}
+    <dt>Race top 10</dt><dd>{{ res.race_pos.values()|list|join(', ') if res.race_pos else '–' }}{% if res.race_pos %} <span class="muted">({{ src.get(('race_pos', 1)) }})</span>{% endif %}</dd>
+    {% if ev.sprint %}<dt>Sprint top 3</dt><dd>{{ [res.sprint_pos.get(1), res.sprint_pos.get(2), res.sprint_pos.get(3)]|select|join(', ') or '–' }}</dd>{% endif %}
+  </dl>
+  {% if not ev.frozen and not ev.imported %}
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="results">
+    {% for f in ['dotd', 'fp', 'pole', 'fl'] + (['sprint_pole'] if ev.sprint else []) %}
+    <label>{{ LABELS[f] }} <span class="muted small">{% if src.get((f,1)) %}now {{ res[f][1] }} ({{ src.get((f,1)) }}){% else %}not set{% endif %}</span>
+      <select name="res_{{ f }}">
+        <option value="">Keep</option>
+        {% if src.get((f,1)) == 'admin' %}<option value="__auto__">Use automatic value</option>{% endif %}
+        {% if f == 'fp' %}{% for t in teams %}<option>{{ t }}</option>{% endfor %}
+        {% else %}{% for d in drivers %}<option value="{{ d.tla }}">{{ d.tla }}  {{ d.name }}</option>{% endfor %}{% endif %}
+      </select></label>
+    {% endfor %}
+    <button class="btn">Save results</button>
+  </form>
+  <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="linkbtn" name="action" value="refetch">Fetch official results again</button></form>
+  {% endif %}
+</section>
+<section class="card">
+  <h2>Penalties</h2>
+  <ul class="list">{% for p in pens %}<li><b>{{ p.name }}</b> −{{ p.points }} {{ p.reason }}
+    <form method="post" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="pid" value="{{ p.id }}"><button class="linkbtn" name="action" value="unpenalty">Remove</button></form></li>
+  {% else %}<li class="muted">None.</li>{% endfor %}</ul>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="penalty">
+    <label>Player<select name="user_id">{% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select></label>
+    <label>Points<input name="points" type="number" value="5" min="1" max="50"></label>
+    <label>Reason<input name="reason" value="Late entry"></label>
+    <button class="btn small">Add penalty</button>
+  </form>
+</section>
+</div>
+{% endblock %}
