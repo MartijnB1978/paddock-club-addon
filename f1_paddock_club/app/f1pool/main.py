@@ -466,7 +466,7 @@ async def predict_save(request: Request, event_id: int):
         msg.append("Not saved, deadline passed: " + ", ".join(skipped) + ".")
     if errors:
         msg.append(" ".join(errors))
-    flash(request, " ".join(msg) or "Nothing to save.", "err" if (errors or skipped) and not saved else "ok")
+    flash(request, " ".join(msg) or "Nothing to save.", "err" if (errors or skipped) else "ok")
     engine.bump()
     return redirect(f"/predict/{ev['id']}")
 
