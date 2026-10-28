@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, db, importer, mailer, scoring
+from . import auth, db, importer, mailer, reports, scoring, standings
 from .engine import Engine
 from .schedule import SCORED
 
@@ -544,18 +544,24 @@ def race(request: Request, event_id: int):
                   season_preds=None)
 
 
-@app.get("/championship/{year}", response_class=HTMLResponse)
-def championship(request: Request, year: int):
-    require_user(request)
+def _f1_context(year):
+    tables = standings.season_tables(year)
+    live_ev = None
+    if engine.live_session:
+        r = db.q1("SELECT event_id FROM sessions WHERE id=?", engine.live_session)
+        live_ev = r["event_id"] if r else None
+    return {"tables": tables, "live_ev": live_ev, "drivers": driver_map(year), "teams": team_map(year)}
+
+
+def _season_prediction_rows(year):
     sl = season_lock(year)
     open_ = bool(sl and db.now_utc() < sl)
     stand = scoring.current_standings(year)
     preds = scoring.load_predictions(0, year)
     rules = scoring.rules_for(year)
     stored = scoring.season_prediction_scores(year)
-    users = db.q("SELECT id, name FROM users ORDER BY name")
     rows = []
-    for usr in users:
+    for usr in db.q("SELECT id, name FROM users ORDER BY name"):
         p = preds.get(usr["id"], {})
         if not p and usr["id"] not in stored:
             continue
@@ -563,37 +569,28 @@ def championship(request: Request, year: int):
         rows.append({"user": usr, "pred": p.get("season_pos", {}), "per_slot": per_slot,
                      "total": stored.get(usr["id"], tot)})
     rows.sort(key=lambda r: -r["total"])
-    # drivers' championship: F1 points per weekend from the stored results
-    race_pts = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
-    sprint_pts = [8, 7, 6, 5, 4, 3, 2, 1]
-    events = db.q("SELECT * FROM events WHERE year=? AND cancelled=0 ORDER BY round", year)
-    per = defaultdict(dict)
-    done = []
-    for ev in events:
-        res = scoring.load_results(ev["id"])
-        if not res.get("race_pos") and not res.get("sprint_pos"):
-            continue
-        done.append(ev)
-        for slot, tla in res.get("race_pos", {}).items():
-            if 1 <= slot <= 10:
-                per[tla][ev["id"]] = per[tla].get(ev["id"], 0) + race_pts[slot - 1]
-        for slot, tla in res.get("sprint_pos", {}).items():
-            if 1 <= slot <= 8:
-                per[tla][ev["id"]] = per[tla].get(ev["id"], 0) + sprint_pts[slot - 1]
-    official = {r["tla"]: (r["position"], r["points"]) for r in db.q(
-        "SELECT position, tla, points FROM standings WHERE year=?", year)}
-    table = []
-    for tla in set(per) | set(official):
-        calc = sum(per[tla].values())
-        pos, pts = official.get(tla, (None, None))
-        table.append({"tla": tla, "pos": pos, "points": pts if pts is not None else calc,
-                      "events": per.get(tla, {})})
-    table.sort(key=lambda r: (r["pos"] is None, r["pos"] or 0, -(r["points"] or 0)))
-    for i, r in enumerate(table, start=1):
-        r["rank"] = r["pos"] or i
-    return render(request, "championship.html", year=year, rows=rows, stand=stand, open_=open_,
-                  season_lock=sl, drivers=driver_map(year), teams=team_map(year), table=table,
-                  done=done, years=[r["year"] for r in db.q("SELECT DISTINCT year FROM events ORDER BY year DESC")])
+    return rows, open_, sl
+
+
+@app.get("/f1", response_class=HTMLResponse)
+def f1_standings(request: Request, year: int | None = None):
+    year = year or default_year()
+    rows, open_, sl = _season_prediction_rows(year)
+    return render(request, "f1.html", year=year, rows=rows, open_=open_, season_lock=sl,
+                  years=[r["year"] for r in db.q("SELECT DISTINCT year FROM events ORDER BY year DESC")],
+                  **_f1_context(year))
+
+
+@app.get("/fragment/f1", response_class=HTMLResponse)
+def f1_fragment(request: Request, year: int | None = None):
+    year = year or default_year()
+    return templates.TemplateResponse(request, "_f1tables.html", {"request": request, "year": year,
+                                                                   **_f1_context(year)})
+
+
+@app.get("/championship/{year}")
+def championship(year: int):
+    return redirect(f"/f1?year={year}")
 
 
 # ------------------------------------------------------------------ admin
@@ -775,6 +772,33 @@ async def admin_import_commit(request: Request):
     engine.bump()
     flash(request, f"Imported {year}: {len(plan['events'])} weekends, {len(plan['players'])} players.")
     return redirect(f"/races?year={year}")
+
+
+@app.get("/admin/reports", response_class=HTMLResponse)
+def admin_reports(request: Request, year: int | None = None):
+    require_admin(request)
+    year = year or default_year()
+    events = list(reversed(standings.completed_events(year)))
+    return render(request, "admin_reports.html", year=year, events=events, kinds=reports.KINDS,
+                  years=[r["year"] for r in db.q("SELECT DISTINCT year FROM events ORDER BY year DESC")])
+
+
+@app.get("/admin/reports/{year}/{rnd}/{kind}.pdf")
+def admin_report_pdf(request: Request, year: int, rnd: int, kind: str, html: int = 0):
+    require_admin(request)
+    if kind not in reports.KINDS or not db.q1("SELECT 1 FROM events WHERE year=? AND round=?", year, rnd):
+        return redirect("/admin/reports")
+    if html:
+        return HTMLResponse(reports.render_html(kind, year, rnd))
+    try:
+        pdf = reports.render_pdf(kind, year, rnd)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("report failed")
+        flash(request, f"Could not create the report: {exc}", "err")
+        return redirect(f"/admin/reports?year={year}")
+    from fastapi.responses import Response
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="{reports.filename(kind, year, rnd)}"'})
 
 
 @app.get("/healthz")

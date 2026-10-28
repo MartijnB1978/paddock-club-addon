@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import driver %}
+{% block main %}
+<div class="page-head">
+  <div><h1>F1 standings {{ year }}</h1>
+  <p class="muted">Points per weekend with the finishing position below. * = sprint weekend. During a race the standings update live.</p></div>
+  {% if years|length > 1 %}
+  <form method="get" class="yearpick"><label class="sr" for="y">Season</label>
+    <select id="y" name="year" onchange="this.form.submit()">{% for y in years %}<option {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}</select>
+  </form>
+  {% endif %}
+</div>
+<div id="f1live" data-url="/fragment/f1?year={{ year }}">{% include "_f1tables.html" %}</div>
+
+{% if user %}
+<section>
+<h2>Championship prediction</h2>
+<p class="muted">10 points for every driver in the exact position, scored against the drivers' standings{% if open_ %}. Predictions stay hidden until {{ season_lock|localtime }}{% endif %}.</p>
+<div class="grid-wrap" tabindex="0">
+<table class="grid preds">
+  <thead><tr><th class="sticky">Player</th><th class="num">Points</th>{% for i in range(1, 11) %}<th>P{{ i }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr class="{{ 'mine' if r.user.id == user.id }}"><th class="sticky">{{ r.user.name }}</th><td class="num strong">{{ r.total }}</td>
+    {% for i in range(1, 11) %}{% set pts = r.per_slot.get(i) %}
+    <td class="cell {{ 'pts5' if pts else ('pts0' if pts is not none) }}">{% if not open_ or r.user.id == user.id %}{{ driver(r.pred.get(i), drivers, teams) }}{% else %}<span class="hidden">•••</span>{% endif %}</td>
+    {% endfor %}</tr>
+  {% else %}
+  <tr><td colspan="12" class="muted">No championship predictions for {{ year }}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="/static/app.js?v=5"></script>{% endblock %}

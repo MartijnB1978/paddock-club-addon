@@ -137,16 +137,17 @@ def season_prediction_scores(year):
     return {uid: score_season(p, stand, rules)[0] for uid, p in preds.items()}
 
 
-def leaderboard(year):
+def leaderboard(year, upto_round=None):
     """Rows sorted by total with tie-break = most race-weekend 'wins'."""
     users = db.q("SELECT id, name FROM users WHERE active=1 OR id IN "
                  "(SELECT user_id FROM scores WHERE year=?) ORDER BY name", year)
-    events = db.q("SELECT * FROM events WHERE year=? AND cancelled=0 ORDER BY round", year)
+    events = db.q("SELECT * FROM events WHERE year=? AND cancelled=0 AND round<=? ORDER BY round",
+                  year, upto_round if upto_round is not None else 10_000)
     season = season_prediction_scores(year)
     pens = defaultdict(int)
     pen_ev = defaultdict(int)
     for r in db.q("SELECT p.user_id, p.event_id, p.points FROM penalties p JOIN events e ON e.id=p.event_id "
-                  "WHERE e.year=?", year):
+                  "WHERE e.year=? AND e.round<=?", year, upto_round if upto_round is not None else 10_000):
         pens[r["user_id"]] += r["points"]
         pen_ev[(r["user_id"], r["event_id"])] += r["points"]
     per_event = {}

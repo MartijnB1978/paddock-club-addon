@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="page-head">
+  <div><h1>Reports {{ year }}</h1>
+  <p class="muted">PDF reports (A4 landscape) as they stood after each completed race. They open in a new tab, ready to download, print or share.</p></div>
+  {% if years|length > 1 %}
+  <form method="get" class="yearpick"><label class="sr" for="y">Season</label>
+    <select id="y" name="year" onchange="this.form.submit()">{% for y in years %}<option {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}</select>
+  </form>
+  {% endif %}
+</div>
+<section class="card">
+  <table class="list reports">
+    <thead><tr><th>Round</th><th>Grand Prix</th>{% for k, label in kinds.items() %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+    {% for e in events %}
+    <tr><td>{{ e.round }}</td><td><b>{{ e.name }}</b>{% if loop.first %} <span class="tag">latest</span>{% endif %}</td>
+      {% for k, label in kinds.items() %}<td><a href="/admin/reports/{{ year }}/{{ e.round }}/{{ k }}.pdf" target="_blank" rel="noopener">PDF</a></td>{% endfor %}
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">No completed races in {{ year }} yet.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}

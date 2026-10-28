@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Paddock Club Reeuwijk{% endblock %}</title>
 <meta name="theme-color" content="#141821">
-<link rel="stylesheet" href="/static/style.css?v=3">
+<link rel="stylesheet" href="/static/style.css?v=4">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -19,10 +19,11 @@
     {% if user %}
     <a href="/predict" class="{{ 'on' if request.url.path.startswith('/predict') }}">Predict</a>
     <a href="/races" class="{{ 'on' if request.url.path.startswith('/race') }}">Races</a>
-    <a href="/championship/{{ year }}" class="{{ 'on' if request.url.path.startswith('/championship') }}">Championship</a>
     {% endif %}
+    <a href="/f1" class="{{ 'on' if request.url.path.startswith('/f1') }}">F1 standings</a>
     <a href="/rules" class="{{ 'on' if request.url.path == '/rules' }}">Rules</a>
-    {% if user and user.is_admin %}<a href="/admin" class="{{ 'on' if request.url.path.startswith('/admin') }}">Admin</a>{% endif %}
+    {% if user and user.is_admin %}<a href="/admin/reports" class="{{ 'on' if request.url.path.startswith('/admin/reports') }}">Reports</a>
+    <a href="/admin" class="{{ 'on' if request.url.path.startswith('/admin') and not request.url.path.startswith('/admin/reports') }}">Admin</a>{% endif %}
   </nav>
   <div class="who">
     {% if user %}

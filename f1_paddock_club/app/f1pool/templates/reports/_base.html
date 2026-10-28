@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{{ title }} {{ year }}</title>
+<style>
+@font-face{font-family:"BC";font-weight:700;src:url(fonts/barlow-condensed-latin-700-normal.woff2)}
+@font-face{font-family:"BC";font-weight:600;src:url(fonts/barlow-condensed-latin-600-normal.woff2)}
+@font-face{font-family:"BL";font-weight:400;src:url(fonts/barlow-latin-400-normal.woff2)}
+@font-face{font-family:"BL";font-weight:600;src:url(fonts/barlow-latin-600-normal.woff2)}
+@page{size:A4 landscape;margin:9mm 9mm 10mm 9mm;
+  @bottom-left{content:"Paddock Club Reeuwijk – generated {{ generated }}";font:400 6.5pt BL;color:#8d97aa}
+  @bottom-right{content:"* = sprint weekend";font:400 6.5pt BL;color:#8d97aa}}
+*{box-sizing:border-box}
+body{margin:0;font:400 7.4pt/1.25 BL,"DejaVu Sans",sans-serif;color:#141821}
+table.head{width:100%;background:#141821;color:#e9edf3;border-radius:5px;margin-bottom:7px;table-layout:auto}
+table.head td{padding:7px 12px;background:#141821!important;white-space:nowrap}
+.brand{text-align:left;font:700 13pt BC;vertical-align:middle}
+.brand em{font-style:normal;color:#8d97aa;font-weight:600}
+.mark{width:30px;height:18px;vertical-align:middle;margin-right:7px}
+.ttl{text-align:right}
+.ttl h1{font:700 15pt BC;margin:0}
+.ttl p{margin:1px 0 0;color:#c9cfdb;font-size:8pt}
+table{border-collapse:collapse;width:100%;table-layout:fixed}
+th,td{padding:1.6px 2px;text-align:center;white-space:nowrap;overflow:hidden}
+thead th{font:600 6.4pt BL;color:#5b6475;border-bottom:1.2px solid #141821;vertical-align:bottom}
+thead img{width:15px;height:10px;display:block;margin:0 auto 1px;border:.3px solid #ccd}
+td.l,th.l{text-align:left}
+td.rk{font:700 8.5pt BC;color:#5b6475}
+td.nm{font-weight:600}
+td.tot{font:700 9pt BC}
+.stripe{display:inline-block;width:3px;height:8px;margin-right:4px;vertical-align:-1px;border-radius:1px}
+tbody tr:nth-child(even) td{background:#f3f4f7}
+td small{display:block;font-size:5.6pt;color:#8d97aa;line-height:1}
+td.z{color:#c3c8d2}
+tr.team td{border-top:1px solid #9aa2b1;font-weight:600;background:#e8ebf1!important}
+tr.sub td{font-size:6.6pt;color:#3c4352;background:#fff!important}
+tr.sub td.nm{padding-left:12px;font-weight:400}
+.best{color:#8a2be2;font-weight:700}
+.up{color:#178a43;font-weight:600} .down{color:#c62f35;font-weight:600}
+</style></head><body>
+<table class="head"><tr>
+  <td class="brand"><svg viewBox="0 0 40 24" class="mark"><g fill="#e9edf3"><rect x="0" y="0" width="8" height="8"/><rect x="16" y="0" width="8" height="8"/><rect x="8" y="8" width="8" height="8"/><rect x="24" y="8" width="8" height="8"/><rect x="0" y="16" width="8" height="8"/><rect x="16" y="16" width="8" height="8"/></g><rect x="34" y="0" width="6" height="24" fill="#b14dff"/></svg>
+    <span>Paddock Club <em>Reeuwijk {{ year }}</em></span></td>
+  <td class="ttl"><h1>{{ title }}</h1><p>After round {{ event.round }}: {{ event.name }}</p></td>
+</tr></table>
+{% block body %}{% endblock %}
+</body></html>

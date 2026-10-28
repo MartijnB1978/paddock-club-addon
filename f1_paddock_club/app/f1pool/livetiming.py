@@ -175,6 +175,19 @@ def championship(data):
     return out
 
 
+def championship_teams(data):
+    """Live/after-session constructors' standings: [(position, team name, points)]"""
+    out = []
+    for key, d in (((data.get("ChampionshipPrediction") or {}).get("Teams")) or {}).items():
+        if not isinstance(d, dict):
+            continue
+        pos = d.get("PredictedPosition") or d.get("CurrentPosition")
+        if pos:
+            out.append((int(pos), d.get("TeamName") or key, d.get("PredictedPoints", d.get("CurrentPoints"))))
+    out.sort()
+    return out
+
+
 def session_status(data):
     st = (data.get("SessionStatus") or {}).get("Status")
     if not st:

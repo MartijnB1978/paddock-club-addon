@@ -50,6 +50,22 @@
     sync();
   });
 
+  // live F1 standings page: refresh tables on every change
+  var f1 = document.getElementById("f1live");
+  if (f1 && window.EventSource) {
+    var f1first = true, f1busy = false;
+    var es1 = new EventSource("/stream");
+    es1.onmessage = function () {
+      if (f1first) { f1first = false; return; }
+      if (f1busy) return; f1busy = true;
+      var sx = Array.prototype.map.call(f1.querySelectorAll(".grid-wrap"), function (g) { return g.scrollLeft; });
+      fetch(f1.dataset.url, {cache: "no-store"}).then(function (r) { return r.text(); }).then(function (html) {
+        f1.innerHTML = html;
+        f1.querySelectorAll(".grid-wrap").forEach(function (g, i) { g.scrollLeft = sx[i] || 0; });
+      }).finally(function () { f1busy = false; });
+    };
+  }
+
   // live standings: server-sent events -> refresh board with FLIP animation
   var board = document.getElementById("board");
   if (!board || !window.EventSource) return;

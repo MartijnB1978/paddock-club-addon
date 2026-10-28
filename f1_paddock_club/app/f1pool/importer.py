@@ -372,6 +372,32 @@ def _team_pairs(wb):
     return pairs
 
 
+def _driver_teams(wb, drv):
+    """{tla: team} from a Teams sheet laid out as  Team | short | Driver | TLA  (2026 workbook)."""
+    out = {}
+    if "Teams" not in wb.sheetnames:
+        return out
+    ws = wb["Teams"]
+    hdr = None
+    for r in range(1, 6):
+        vals = [str(ws.cell(row=r, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
+        if "teams" in vals and "drivers" in vals:
+            hdr = (r, vals.index("teams") + 1, vals.index("drivers") + 1)
+            break
+    if not hdr:
+        return out
+    r0, tc, dc = hdr
+    team = None
+    for r in range(r0 + 1, ws.max_row + 1):
+        t = ws.cell(row=r, column=tc).value
+        d = ws.cell(row=r, column=dc).value
+        if isinstance(t, str) and t.strip():
+            team = t.strip()
+        if isinstance(d, str) and d.strip() and team:
+            out[drv.tla(d)] = team
+    return out
+
+
 def _team_names(wb):
     names = set()
     if "Teams" in wb.sheetnames:
@@ -559,13 +585,14 @@ def plan_v2(wb, year):
                 if int(pos) in standings:
                     break           # end of the drivers table
                 standings[int(pos)] = (drv.tla(nm), dc.cell(row=r, column=4).value)
+    dteams = _driver_teams(wb, drv)
     future_left = any(not e["played"] for e in plan_events) or len([e for e in plan_events if e["played"]]) < len(events)
     final = year < db.now_utc().year or not future_left
     return {"format": "v2", "year": year, "events": plan_events, "players": [
         {"name": p, "season_pts": season_pts[p], "excel_total": excel_total.get(p),
          "race_pts": [e["points"][p] for e in plan_events if e["played"]]} for p in players],
         "season_preds": season_preds, "season_final": final, "standings": standings,
-        "team_rows": [{"name": n, "tla": t, "number": "", "team": ""} for n, t in pairs if " " in n]}
+        "team_rows": [{"name": n, "tla": t, "number": "", "team": dteams.get(t, "")} for n, t in pairs if " " in n]}
 
 
 def commit_v2(pl):

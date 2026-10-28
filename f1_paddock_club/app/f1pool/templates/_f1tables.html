@@ -1,0 +1,54 @@
+{% from "_macros.html" import driver, team, team_logo %}
+{% set T = tables %}
+<div id="f1-inner">
+<section>
+  <h2>Drivers {% if live_ev %}<span class="badge live-dot">Live</span>{% endif %}</h2>
+  <div class="grid-wrap" tabindex="0" aria-label="Drivers' championship, scrolls sideways">
+  <table class="grid champ">
+    <thead><tr>
+      <th class="sticky">Driver</th><th class="num">Points</th>
+      {% for e in T.events %}<th class="num ev {{ 'live' if e.id == live_ev }}"><a href="/race/{{ e.id }}" title="{{ e.name }}">{{ e.name|short }}{% if e.sprint %}*{% endif %}</a></th>{% endfor %}
+    </tr></thead>
+    <tbody>
+    {% for r in T.drivers %}
+      <tr><th class="sticky"><span class="rk">{{ r.rank }}</span> {{ driver(r.tla, drivers, teams, true) }}</th>
+        <td class="num strong">{{ r.points|int if r.points is not none else '' }}</td>
+        {% for e in T.events %}{% set v = r.events.get(e.id) %}{% set p = r.pos.get(e.id) %}
+        <td class="num pp {{ 'live' if e.id == live_ev }}">{% if v is not none or p %}<b>{{ v or 0 }}</b><small>{{ p or '' }}</small>{% endif %}</td>
+        {% endfor %}
+      </tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">No results yet for {{ year }}.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Constructors</h2>
+  <div class="grid-wrap" tabindex="0" aria-label="Constructors' championship, scrolls sideways">
+  <table class="grid champ">
+    <thead><tr>
+      <th class="sticky">Team</th><th class="num">Points</th>
+      {% for e in T.events %}<th class="num ev {{ 'live' if e.id == live_ev }}">{{ e.name|short }}{% if e.sprint %}*{% endif %}</th>{% endfor %}
+    </tr></thead>
+    <tbody>
+    {% for t in T.teams %}
+      <tr class="teamrow"><th class="sticky"><span class="rk">{{ t.rank }}</span> {{ team(t.team, teams) }}</th>
+        <td class="num strong">{{ t.points|int if t.points is not none else '' }}</td>
+        {% for e in T.events %}{% set v = t.events.get(e.id) %}<td class="num {{ 'live' if e.id == live_ev }}"><b>{{ v if v is not none else '' }}</b></td>{% endfor %}
+      </tr>
+      {% for d in t.drivers %}
+      <tr class="subrow"><th class="sticky">{{ driver(d.tla, drivers, teams, true) }}</th><td class="num">{{ d.points }}</td>
+        {% for e in T.events %}{% set v = d.events.get(e.id) %}<td class="num">{{ v if v is not none else '' }}</td>{% endfor %}
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="3" class="muted">Team data appears once F1's driver lists are loaded.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+</div>

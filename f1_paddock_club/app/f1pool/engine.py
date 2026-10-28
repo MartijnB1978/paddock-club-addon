@@ -81,6 +81,8 @@ class Engine:
             self.finalise(now)
         if self.due("standings", 6 * 3600):
             self.fallback_standings(year)
+        if self.due("backfill", 3600):
+            self.backfill_entrants(year)
 
     # ------------------------------------------------------------ entrants
     def refresh_entrants(self, now):
@@ -116,6 +118,27 @@ class Engine:
                     c.execute("INSERT INTO teams(year,name,colour) VALUES(?,?,?) ON CONFLICT(year,name) "
                               "DO UPDATE SET colour=excluded.colour", (ev["year"], d["team"], d["colour"]))
         self.bump()
+
+    def backfill_entrants(self, year):
+        """Teams/colours for past weekends (also imported ones) from the official driver list."""
+        rows = db.q("SELECT e.*, s.path AS rpath FROM events e JOIN sessions s ON s.event_id=e.id AND s.kind='R' "
+                    "WHERE e.year IN (?, ?) AND e.cancelled=0 AND s.path IS NOT NULL AND s.start_utc<? "
+                    "AND EXISTS(SELECT 1 FROM results r WHERE r.event_id=e.id) "
+                    "AND NOT EXISTS(SELECT 1 FROM entrants x WHERE x.event_id=e.id AND x.colour!='') "
+                    "ORDER BY e.year DESC, e.round DESC LIMIT 8",
+                    year, year - 1, db.iso(db.now_utc() - timedelta(hours=3)))
+        for ev in rows:
+            txt = self.http.get(f"{ev['rpath']}DriverList.jsonStream")
+            if not txt:
+                continue
+            st = lt.TimingState()
+            for m in lt.parse_stream(txt):
+                st.apply("DriverList", m)
+            drivers = lt.driver_info(st.data)
+            if drivers:
+                self.save_entrants(ev, drivers)
+        if rows:
+            self.resolve_logos(year - 1)
 
     def copy_previous_entrants(self, ev):
         prev = db.q1("SELECT e.id FROM events e WHERE EXISTS(SELECT 1 FROM entrants x WHERE x.event_id=e.id) "
@@ -236,6 +259,14 @@ class Engine:
                     if num in num2tla:
                         c.execute("INSERT OR REPLACE INTO standings VALUES(?,?,?,?,?)",
                                   (year, pos, num2tla[num], pts, db.iso(db.now_utc())))
+        teams = lt.championship_teams(data)
+        if teams:
+            year = db.q1("SELECT year FROM events WHERE id=?", ev_id)["year"]
+            with db.tx() as c:
+                c.execute("DELETE FROM team_standings WHERE year=?", (year,))
+                for pos, team, pts in teams:
+                    c.execute("INSERT OR REPLACE INTO team_standings VALUES(?,?,?,?,?)",
+                              (year, pos, team, pts, db.iso(db.now_utc())))
         self.bump()
 
     def write_results(self, ev_id, res, source):

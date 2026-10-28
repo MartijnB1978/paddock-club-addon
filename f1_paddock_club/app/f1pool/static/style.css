@@ -202,3 +202,11 @@ label{display:flex;flex-direction:column;gap:4px;font-size:.92rem;color:var(--mu
 .stack .btn{align-self:flex-start}
 .drv .tlogo,.drv .tbadge{margin-left:2px;opacity:.9}
 .tower-head .gap{font:inherit;color:var(--muted)}
+.champ td.pp b{display:block;font-weight:600}
+.champ td.pp small{display:block;color:var(--muted);font-size:.72rem;line-height:1}
+.champ td.live,.champ th.live{background:rgba(255,200,61,.08)}
+.champ .rk{display:inline-block;min-width:1.6em;color:var(--muted);font-family:var(--display);font-weight:700}
+.champ tr.teamrow th,.champ tr.teamrow td{border-top:1px solid var(--line)}
+.champ tr.subrow th,.champ tr.subrow td{font-size:.85rem;color:var(--muted);padding-top:3px;padding-bottom:3px}
+.champ tr.subrow th{padding-left:2.4em;font-weight:400}
+section + section{margin-top:28px}

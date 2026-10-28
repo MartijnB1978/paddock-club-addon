@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS results(
 CREATE TABLE IF NOT EXISTS standings(
   year INTEGER, position INTEGER, tla TEXT, points REAL, updated_at TEXT,
   PRIMARY KEY(year, position));
+CREATE TABLE IF NOT EXISTS team_standings(
+  year INTEGER, position INTEGER, team TEXT, points REAL, updated_at TEXT,
+  PRIMARY KEY(year, position));
 CREATE TABLE IF NOT EXISTS penalties(
   id INTEGER PRIMARY KEY, user_id INTEGER, event_id INTEGER, points INTEGER, reason TEXT,
   created_at TEXT);

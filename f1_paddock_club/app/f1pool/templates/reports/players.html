@@ -1,0 +1,18 @@
+{% extends "_base.html" %}
+{% block body %}{% set evs = pevents %}
+<table>
+  <colgroup><col style="width:16px"><col style="width:70px"><col style="width:20px"><col style="width:28px"><col style="width:22px">{% for e in evs %}<col>{% endfor %}</colgroup>
+  <thead><tr><th></th><th class="l">Player</th><th></th><th>Total</th><th>WC</th>{% include "_evhead.html" %}</tr></thead>
+  <tbody>
+  {% for r in board %}
+  <tr><td class="rk">{{ r.rank }}</td><td class="l nm">{{ r.name }}</td>
+    <td>{% if r.move > 0 %}<span class="up">▲{{ r.move }}</span>{% elif r.move < 0 %}<span class="down">▼{{ -r.move }}</span>{% endif %}</td>
+    <td class="tot">{{ r.total }}</td><td>{{ r.season }}</td>
+    {% for e in evs %}{% set v = r.events.get(e.id) %}
+    <td class="{{ 'best' if v and v == e.best }}">{{ v if v is not none else '' }}</td>{% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p style="font-size:6.5pt;color:#5b6475;margin-top:6px">Purple: best score of the weekend. Ties are decided by the number of weekend wins.</p>
+{% endblock %}

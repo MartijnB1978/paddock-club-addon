@@ -1,0 +1,17 @@
+{% extends "_base.html" %}
+{% block body %}{% set T = tables %}{% set evs = T.events %}
+<table>
+  <colgroup><col style="width:16px"><col style="width:96px"><col style="width:26px">{% for e in evs %}<col>{% endfor %}</colgroup>
+  <thead><tr><th></th><th class="l">Driver</th><th>Total</th>{% include "_evhead.html" %}</tr></thead>
+  <tbody>
+  {% for r in T.drivers %}
+  <tr><td class="rk">{{ r.rank }}</td>
+    <td class="l nm"><span class="stripe" style="background:#{{ colours.get(r.tla, 'aab') }}"></span>{{ r.name }}</td>
+    <td class="tot">{{ r.points|int if r.points is not none else 0 }}</td>
+    {% for e in evs %}{% set v = r.events.get(e.id) %}{% set p = r.pos.get(e.id) %}
+    <td class="{{ 'z' if not v }}">{{ v if v is not none else '' }}<small>{{ p or '' }}</small></td>{% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
