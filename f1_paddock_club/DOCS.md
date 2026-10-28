@@ -60,6 +60,6 @@ Paste the key in the add-on option `tailscale_authkey`. After the first start th
 
 - Calendar: FastF1's calendar file (built from F1's calendar), overridden by F1's official live-timing index. Date, time, venue changes and cancellations are picked up every 6 hours (or with *Sync with F1 now*).
 - Live and final results: livetiming.formula1.com, the official F1 timing feed.
-- Driver of the Day is not in the timing data: you get an e-mail after each race to enter it on the weekend's admin page. A weekend freezes 48 hours after the race once Driver of the Day is set (at the latest after 7 days).
+- Driver of the Day (with the fan-vote split) is read automatically from F1's Driver of the Day article on formula1.com. If it isn't found within 6 hours you get an e-mail, and you can paste the article link on the weekend's admin page. A weekend freezes 48 hours after the race once Driver of the Day is set (at the latest after 7 days).
 
 Data is stored in `/data/f1pool.sqlite3`, which is included in Home Assistant backups.

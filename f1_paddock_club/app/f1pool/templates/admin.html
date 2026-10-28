@@ -62,7 +62,7 @@
 
 <section class="card">
   <h2>Race weekends {{ year }}</h2>
-  <p class="muted">Open a weekend to enter Driver of the Day, correct a result or give a penalty.</p>
+  <p class="muted">Open a weekend to correct a result, set Driver of the Day if it wasn't found automatically, or give a penalty.</p>
   <ul class="cal compact">
     {% for e in events %}<li class="{{ 'done' if e.frozen or e.imported }}"><span class="rnd">{{ e.round }}</span><a href="/admin/event/{{ e.id }}">{{ e.name }}</a>
       <span class="state">{% if e.cancelled %}Cancelled{% elif e.imported %}From Excel{% elif e.frozen %}Frozen{% endif %}</span></li>{% endfor %}
