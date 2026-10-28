@@ -563,8 +563,37 @@ def championship(request: Request, year: int):
         rows.append({"user": usr, "pred": p.get("season_pos", {}), "per_slot": per_slot,
                      "total": stored.get(usr["id"], tot)})
     rows.sort(key=lambda r: -r["total"])
+    # drivers' championship: F1 points per weekend from the stored results
+    race_pts = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+    sprint_pts = [8, 7, 6, 5, 4, 3, 2, 1]
+    events = db.q("SELECT * FROM events WHERE year=? AND cancelled=0 ORDER BY round", year)
+    per = defaultdict(dict)
+    done = []
+    for ev in events:
+        res = scoring.load_results(ev["id"])
+        if not res.get("race_pos") and not res.get("sprint_pos"):
+            continue
+        done.append(ev)
+        for slot, tla in res.get("race_pos", {}).items():
+            if 1 <= slot <= 10:
+                per[tla][ev["id"]] = per[tla].get(ev["id"], 0) + race_pts[slot - 1]
+        for slot, tla in res.get("sprint_pos", {}).items():
+            if 1 <= slot <= 8:
+                per[tla][ev["id"]] = per[tla].get(ev["id"], 0) + sprint_pts[slot - 1]
+    official = {r["tla"]: (r["position"], r["points"]) for r in db.q(
+        "SELECT position, tla, points FROM standings WHERE year=?", year)}
+    table = []
+    for tla in set(per) | set(official):
+        calc = sum(per[tla].values())
+        pos, pts = official.get(tla, (None, None))
+        table.append({"tla": tla, "pos": pos, "points": pts if pts is not None else calc,
+                      "events": per.get(tla, {})})
+    table.sort(key=lambda r: (r["pos"] is None, r["pos"] or 0, -(r["points"] or 0)))
+    for i, r in enumerate(table, start=1):
+        r["rank"] = r["pos"] or i
     return render(request, "championship.html", year=year, rows=rows, stand=stand, open_=open_,
-                  season_lock=sl, drivers=driver_map(year), teams=team_map(year))
+                  season_lock=sl, drivers=driver_map(year), teams=team_map(year), table=table,
+                  done=done, years=[r["year"] for r in db.q("SELECT DISTINCT year FROM events ORDER BY year DESC")])
 
 
 # ------------------------------------------------------------------ admin

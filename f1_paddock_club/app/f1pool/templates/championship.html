@@ -2,15 +2,40 @@
 {% from "_macros.html" import driver %}
 {% block main %}
 <div class="page-head">
-  <div><h1>Championship prediction {{ year }}</h1>
-  <p class="muted">10 points for every driver in the exact championship position. Scored against the current standings{% if open_ %}; predictions stay hidden until {{ season_lock|localtime }}{% endif %}.</p></div>
-  {% if open_ %}<a class="btn" href="/predict">Make your prediction</a>{% endif %}
+  <h1>Drivers' championship {{ year }}</h1>
+  {% if years|length > 1 %}
+  <form method="get" onsubmit="location='/championship/'+this.y.value;return false" class="yearpick">
+    <label class="sr" for="y">Season</label>
+    <select id="y" name="y" onchange="this.form.onsubmit()">{% for y in years %}<option {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}</select>
+  </form>
+  {% endif %}
 </div>
+<div class="grid-wrap" tabindex="0" aria-label="Drivers' points per race, scrolls sideways">
+<table class="grid">
+  <thead><tr>
+    <th class="sticky">Driver</th><th class="num">Points</th>
+    {% for e in done %}<th class="num ev"><a href="/race/{{ e.id }}" title="{{ e.name }}">{{ e.name|short }}</a></th>{% endfor %}
+  </tr></thead>
+  <tbody>
+  {% for r in table %}
+    <tr><th class="sticky">{{ r.rank }}. {{ driver(r.tla, drivers, teams, true) }}</th>
+      <td class="num strong">{{ r.points|int if r.points is not none else '' }}</td>
+      {% for e in done %}{% set v = r.events.get(e.id) %}<td class="num">{{ v if v else '' }}</td>{% endfor %}
+    </tr>
+  {% else %}
+    <tr><td colspan="3" class="muted">No results yet for {{ year }}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted small">Points per weekend include the sprint. The total is the official F1 standing; it also reflects penalties applied after a race.</p>
+
+<h2>Championship prediction</h2>
+<p class="muted">10 points for every driver in the exact position, scored against the standings above{% if open_ %}. Predictions stay hidden until {{ season_lock|localtime }}{% endif %}.</p>
 <div class="grid-wrap" tabindex="0">
 <table class="grid preds">
   <thead><tr><th class="sticky">Player</th><th class="num">Points</th>{% for i in range(1, 11) %}<th>P{{ i }}</th>{% endfor %}</tr></thead>
   <tbody>
-  <tr class="standings-row"><th class="sticky">Standings now</th><td></td>{% for i in range(1, 11) %}<td class="cell">{{ driver(stand.get(i), drivers, teams) }}</td>{% endfor %}</tr>
   {% for r in rows %}
   <tr class="{{ 'mine' if r.user.id == user.id }}"><th class="sticky">{{ r.user.name }}</th><td class="num strong">{{ r.total }}</td>
     {% for i in range(1, 11) %}{% set pts = r.per_slot.get(i) %}
