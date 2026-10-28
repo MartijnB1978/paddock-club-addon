@@ -252,8 +252,9 @@ def live_panel():
 def home(request: Request, year: int | None = None):
     year = year or default_year()
     board, events, live_ev = scoring.leaderboard(year)
+    dl = upcoming_deadlines()
     return render(request, "home.html", year=year, board=board, events=events, live_ev=live_ev,
-                  panel=live_panel(), deadlines=upcoming_deadlines(), drivers=driver_map(year),
+                  panel=live_panel(), deadlines=dl, nxt=dl[0] if dl else None, drivers=driver_map(year),
                   teams=team_map(year), years=[r["year"] for r in db.q(
                       "SELECT DISTINCT year FROM events ORDER BY year DESC")])
 
@@ -264,6 +265,7 @@ def board_fragment(request: Request, year: int | None = None):
     board, events, live_ev = scoring.leaderboard(year)
     return templates.TemplateResponse(request, "_board.html", {
         "request": request, "board": board, "live_ev": live_ev, "panel": live_panel(),
+        "nxt": (upcoming_deadlines(1) or [None])[0],
         "drivers": driver_map(year), "teams": team_map(year), "events": events})
 
 

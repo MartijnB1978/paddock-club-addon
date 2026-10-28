@@ -256,15 +256,20 @@ class F1Http:
         self.tokens = tokens
         self.s = requests.Session()
         self.s.headers["User-Agent"] = "PaddockClubReeuwijk/1.0"
+        self.last_status = ""
+        self.timing_status = ""
 
     def get(self, path, timeout=30):
         """GET a static file; tries F1 (with token) then the mirror."""
         tok = self.tokens.get() if self.tokens else None
         headers = {"Authorization": f"Bearer {tok.value}"} if tok else {}
+        statuses = []
         for base in (BASE, MIRROR):
             try:
                 r = self.s.get(f"{base}/static/{path}", headers=headers if base == BASE else {},
                                timeout=timeout)
+                statuses.append(f"{'F1' if base == BASE else 'mirror'} {r.status_code}")
+                self.last_status = ", ".join(statuses)
                 if r.status_code == 401 and tok and base == BASE:
                     self.tokens.clear()
                 if r.status_code == 200 and r.content:
@@ -272,6 +277,8 @@ class F1Http:
                     return r.text
             except requests.RequestException as exc:
                 log.debug("static fetch %s failed: %s", base, exc)
+                statuses.append(f"{'F1' if base == BASE else 'mirror'} unreachable")
+                self.last_status = ", ".join(statuses)
         return None
 
     def index(self, year):
@@ -289,6 +296,8 @@ class F1Http:
         got = False
         for topic in STATIC_TOPICS:
             t = self.get(f"{path}{topic}.jsonStream")
+            if topic == "TimingData":
+                self.timing_status = self.last_status
             if not t:
                 continue
             got = True

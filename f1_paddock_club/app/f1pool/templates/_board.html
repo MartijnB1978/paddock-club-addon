@@ -52,7 +52,13 @@
     </dl>
     {% endif %}
   {% else %}
-    <p class="muted pad">The latest session appears here once the season is under way.</p>
+    {% if nxt %}
+    <header class="panel-head"><div><h2>{{ nxt.ev_name }}</h2><p class="muted">{{ nxt.name }}, {{ nxt.start_utc|localtime }}</p></div>
+      <span class="badge">Next</span></header>
+    <p class="muted pad">Live timing appears here when this session starts.</p>
+    {% else %}
+    <p class="muted pad">Live timing appears here when the next session starts.</p>
+    {% endif %}
   {% endif %}
 </section>
 </div>

@@ -323,7 +323,13 @@ class Engine:
                 continue
             st = self.http.session_state(s["path"])
             db.ex("UPDATE sessions SET last_fetch=? WHERE id=?", db.iso(now), s["id"])
+            ev_name = db.q1("SELECT name FROM events WHERE id=?", s["event_id"])["name"]
+            if not (st and lt.classification(st.data)):
+                db.logmsg("warning", f"Official results for {ev_name} {s['name']} not available yet "
+                                     f"({self.http.timing_status}, {s['path']}); retrying in 2 hours")
             if st and lt.classification(st.data):
+                if s["status"] != "final":
+                    db.logmsg("info", f"Official results loaded: {ev_name} {s['name']}")
                 first = s["status"] != "final"
                 self.apply_state(s, st.data, st.pit_events, "final")
                 db.ex("UPDATE sessions SET status='final', finished_at=COALESCE(finished_at, ?) WHERE id=?",
