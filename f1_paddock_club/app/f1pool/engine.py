@@ -17,6 +17,8 @@ log = logging.getLogger("engine")
 FREEZE_AFTER = timedelta(hours=48)
 REFETCH_EVERY = timedelta(hours=2)
 LIVE_PRE = timedelta(minutes=15)
+REMIND_BEFORE = timedelta(hours=1)
+REMIND_MIN_LEFT = timedelta(minutes=10)
 
 
 class Engine:
@@ -87,6 +89,50 @@ class Engine:
             self.dotd_snapshot(now)
         if self.due("dotd", 600):
             self.dotd_poll(now)
+        if self.due("reminders", 60):
+            self.send_reminders(now)
+
+    # ------------------------------------------------------------ reminders
+    def send_reminders(self, now):
+        """E-mail players who haven't (fully) predicted, once, ~1 hour before each scored session."""
+        sessions = db.q(
+            "SELECT s.*, e.name AS ev_name, e.year, e.sprint FROM sessions s JOIN events e ON e.id=s.event_id "
+            "WHERE e.cancelled=0 AND e.imported=0 AND s.kind IN ('SQ','S','Q','R') "
+            "AND s.start_utc>? AND s.start_utc<=?", db.iso(now + REMIND_MIN_LEFT), db.iso(now + REMIND_BEFORE))
+        for s in sessions:
+            key = f"reminded_{s['id']}"
+            if db.setting(key):
+                continue
+            db.set_setting(key, db.iso(now))
+            fields = [f for f, (n, kind) in scoring.FIELDS.items() if kind == s["kind"]]
+            users = db.q("SELECT * FROM users WHERE active=1 AND email IS NOT NULL")
+            start = db.parse_iso(s["start_utc"])
+            try:
+                from zoneinfo import ZoneInfo
+                local = start.astimezone(ZoneInfo(os.environ.get("TZ_DISPLAY") or "Europe/Amsterdam"))
+            except Exception:  # noqa: BLE001
+                local = start
+            link = f"{mailer.base_url()}/predict/{s['event_id']}"
+            sent = 0
+            for u in users:
+                missing = []
+                for f in fields:
+                    need = scoring.FIELDS[f][0]
+                    have = db.q1("SELECT COUNT(*) AS n FROM predictions WHERE user_id=? AND event_id=? AND field=? "
+                                 "AND value IS NOT NULL AND value<>''", u["id"], s["event_id"], f)["n"]
+                    if have < need:
+                        missing.append(scoring.LABELS[f])
+                if not missing:
+                    continue
+                label = s["name"] or s["kind"]
+                mailer.send(u["email"], f"Reminder: {s['ev_name']} {label} picks close at {local:%H:%M}",
+                            f"Hi {u['name']},\n\nThe {s['ev_name']} {label} starts at {local:%H:%M} "
+                            f"({local:%A %d %B}). Your prediction isn't complete yet:\n- "
+                            + "\n- ".join(missing)
+                            + f"\n\nEnter it here before the start:\n{link}\n\nNo prediction = no points.\n\n"
+                            "Paddock Club Reeuwijk")
+                sent += 1
+            db.logmsg("info", f"Reminders for {s['ev_name']} {s['kind']}: {sent} sent")
 
     # ------------------------------------------------------------ entrants
     def refresh_entrants(self, now):
