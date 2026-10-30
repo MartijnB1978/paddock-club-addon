@@ -1,4 +1,5 @@
 {% from "_macros.html" import driver, team %}
+{% from "_predgrid.html" import pred_grid %}
 <div id="board-inner">
 <section class="tower" aria-label="Players standings">
   <div class="tower-head">
@@ -69,4 +70,13 @@
     {% endif %}
   {% endif %}
 </section>
+{% if lg %}
+<section class="livegrid" aria-label="Live predictions">
+  <header class="panel-head">
+    <div><h2><a href="/race/{{ lg.ev.id }}">{{ lg.ev.name }}</a></h2><p class="muted">{{ lg.session.name }}, predictions against the {{ 'live' if lg.is_live else 'latest' }} order</p></div>
+    {% if lg.is_live %}<span class="badge live-dot">Live</span>{% else %}<span class="badge">Provisional</span>{% endif %}
+  </header>
+  {{ pred_grid(lg.rows, lg.fields, lg.visible, user, drivers, teams, live=true) }}
+</section>
+{% endif %}
 </div>

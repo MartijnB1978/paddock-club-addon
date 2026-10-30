@@ -17,7 +17,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth, db, dotd, importer, mailer, reports, scoring, standings
 from .engine import Engine
-from .schedule import SCORED
+from .schedule import DURATION, SCORED
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("web")
@@ -249,6 +249,52 @@ def live_panel():
             "is_live": bool(sid and sid == s["id"]), "status": engine.live_status}
 
 
+def event_grid(ev, only_locked=False):
+    """Rows for the predictions grid of an event, scored against the current results."""
+    res = scoring.load_results(ev["id"])
+    preds = scoring.load_predictions(ev["id"])
+    rules = scoring.rules_for(ev["year"])
+    users = db.q("SELECT id, name FROM users WHERE active=1 OR id IN (SELECT user_id FROM predictions WHERE "
+                 "event_id=?) ORDER BY name", ev["id"])
+    fields = scoring.fields_for_event(ev)
+    visible = {f: is_locked(ev["id"], f) or ev["imported"] for f in fields}
+    if only_locked:
+        fields = [f for f in fields if visible[f]]
+    pens = defaultdict(list)
+    for p in db.q("SELECT * FROM penalties WHERE event_id=?", ev["id"]):
+        pens[p["user_id"]].append(p)
+    rows = []
+    for usr in users:
+        p = preds.get(usr["id"], {})
+        tot, per_field, per_slot = scoring.score_event(p, res, rules)
+        rows.append({"user": usr, "pred": p, "per_slot": per_slot, "total": tot,
+                     "pen": sum(x["points"] for x in pens[usr["id"]]), "pens": pens[usr["id"]]})
+    return res, rows, fields, visible
+
+
+LIVEGRID_AFTER = timedelta(hours=2)
+
+
+def live_grid():
+    """Predictions grid for the session that is live, or ended less than 2 hours ago."""
+    now = db.now_utc()
+    s = db.q1("SELECT s.* FROM sessions s JOIN events e ON e.id=s.event_id WHERE e.cancelled=0 AND e.imported=0 "
+              "AND s.kind IN ('SQ','S','Q','R') AND s.start_utc<=? ORDER BY s.start_utc DESC LIMIT 1", db.iso(now))
+    if not s:
+        return None
+    end = db.parse_iso(s["finished_at"]) if s["finished_at"] else \
+        db.parse_iso(s["start_utc"]) + timedelta(minutes=DURATION[s["kind"]])
+    is_live = engine.live_session == s["id"] and not s["finished_at"]
+    if not is_live and now > end + LIVEGRID_AFTER:
+        return None
+    ev = db.q1("SELECT * FROM events WHERE id=?", s["event_id"])
+    _, rows, fields, visible = event_grid(ev, only_locked=True)
+    if not fields:
+        return None
+    rows.sort(key=lambda r: (-(r["total"] - r["pen"]), r["user"]["name"].lower()))
+    return {"session": s, "ev": ev, "rows": rows, "fields": fields, "visible": visible, "is_live": is_live}
+
+
 # ------------------------------------------------------------------ public
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, year: int | None = None):
@@ -256,7 +302,7 @@ def home(request: Request, year: int | None = None):
     board, events, live_ev = scoring.leaderboard(year)
     dl = upcoming_deadlines()
     return render(request, "home.html", year=year, board=board, events=events, live_ev=live_ev,
-                  panel=live_panel(), deadlines=dl, nxt=dl[0] if dl else None, drivers=driver_map(year),
+                  panel=live_panel(), lg=live_grid() if current_user(request) else None, deadlines=dl, nxt=dl[0] if dl else None, drivers=driver_map(year),
                   teams=team_map(year), years=[r["year"] for r in db.q(
                       "SELECT DISTINCT year FROM events ORDER BY year DESC")])
 
@@ -267,6 +313,7 @@ def board_fragment(request: Request, year: int | None = None):
     board, events, live_ev = scoring.leaderboard(year)
     return templates.TemplateResponse(request, "_board.html", {
         "request": request, "board": board, "live_ev": live_ev, "panel": live_panel(),
+        "user": current_user(request), "lg": live_grid() if current_user(request) else None,
         "nxt": (upcoming_deadlines(1) or [None])[0],
         "drivers": driver_map(year), "teams": team_map(year), "events": events})
 
@@ -523,25 +570,11 @@ def race(request: Request, event_id: int):
     ev = db.q1("SELECT * FROM events WHERE id=?", event_id)
     if not ev:
         return redirect("/races")
-    res = scoring.load_results(ev["id"])
-    preds = scoring.load_predictions(ev["id"])
-    rules = scoring.rules_for(ev["year"])
-    users = db.q("SELECT id, name FROM users WHERE active=1 OR id IN (SELECT user_id FROM predictions WHERE "
-                 "event_id=?) ORDER BY name", ev["id"])
-    fields = scoring.fields_for_event(ev)
-    visible = {f: is_locked(ev["id"], f) or ev["imported"] for f in fields}
+    res, rows, fields, visible = event_grid(ev)
     stored = scoring.event_scores(ev)
-    pens = defaultdict(list)
-    for p in db.q("SELECT * FROM penalties WHERE event_id=?", ev["id"]):
-        pens[p["user_id"]].append(p)
-    rows = []
-    for usr in users:
-        p = preds.get(usr["id"], {})
-        tot, per_field, per_slot = scoring.score_event(p, res, rules)
-        if usr["id"] in stored:
-            tot = stored[usr["id"]][0]
-        rows.append({"user": usr, "pred": p, "per_slot": per_slot, "total": tot,
-                     "pen": sum(x["points"] for x in pens[usr["id"]]), "pens": pens[usr["id"]]})
+    for r in rows:
+        if r["user"]["id"] in stored:
+            r["total"] = stored[r["user"]["id"]][0]
     rows.sort(key=lambda r: -(r["total"] - r["pen"]))
     votes = db.q("SELECT * FROM dotd_votes WHERE event_id=? ORDER BY rank", ev["id"])
     return render(request, "race.html", ev=ev, res=res, rows=rows, fields=fields, visible=visible, votes=votes,
