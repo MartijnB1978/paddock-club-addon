@@ -145,12 +145,10 @@ label{display:flex;flex-direction:column;gap:4px;font-size:.92rem;color:var(--mu
 .grid th.ev.live a{color:var(--amber)}
 .grid tr.mine .sticky{box-shadow:inset 3px 0 0 var(--amber)}
 .cell{text-align:left}
-/* F1 timing colours: purple = overall best, green = good, red = wrong */
-.cell{--f1p:#a020f0;--f1g:#00d64f;--f1r:#e10600}
+/* F1 timing colours: purple = overall best, green = good; no points = no colour */
+.cell{--f1p:#a020f0;--f1g:#00d64f}
 .cell.pts3,.cell.pts5,.cell.pts10{background:color-mix(in srgb,var(--f1p) 32%,transparent);box-shadow:inset 3px 0 0 var(--f1p)}
 .cell.pts1{background:color-mix(in srgb,var(--f1g) 22%,transparent);box-shadow:inset 3px 0 0 var(--f1g)}
-.cell.pts0{background:color-mix(in srgb,var(--f1r) 20%,transparent);box-shadow:inset 3px 0 0 var(--f1r)}
-.cell.pts0 .tla,.cell.pts0 b{color:#ff4d4d}
 .livegrid{margin-top:24px}
 .livegrid .panel-head{margin-bottom:10px}
 .grid .lp{display:inline-block;min-width:1.4em;color:var(--muted);font-weight:500;margin-right:6px}
