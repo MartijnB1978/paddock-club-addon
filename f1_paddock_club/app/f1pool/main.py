@@ -650,6 +650,21 @@ async def admin_user(request: Request):
         db.ex("UPDATE users SET active=0 WHERE id=?", u["id"])
     elif action == "activate":
         db.ex("UPDATE users SET active=1 WHERE id=?", u["id"])
+    elif action == "purge":
+        me = current_user(request)
+        if me and me["id"] == u["id"]:
+            flash(request, "You can't delete your own account.", "err")
+            return redirect("/admin")
+        if (form.get("confirm_name") or "").strip().lower() != u["name"].lower():
+            flash(request, f"Type the name exactly to delete {u['name']}.", "err")
+            return redirect("/admin")
+        name = u["name"]
+        with db.tx() as c:
+            for t in ("tokens", "predictions", "penalties", "scores", "season_scores"):
+                c.execute(f"DELETE FROM {t} WHERE user_id=?", (u["id"],))
+            c.execute("DELETE FROM log WHERE msg LIKE ?", (f"%{name}%",))
+            c.execute("DELETE FROM users WHERE id=?", (u["id"],))
+        flash(request, f"{name} and all their data are permanently deleted.")
     elif action == "email":
         db.ex("UPDATE users SET email=? WHERE id=?", (form.get("email") or "").strip() or None, u["id"])
     engine.bump()

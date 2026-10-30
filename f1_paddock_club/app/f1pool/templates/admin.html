@@ -46,6 +46,12 @@
           <button class="linkbtn" name="action" value="toggle_admin">{{ 'Remove admin' if u.is_admin else 'Make admin' }}</button>
           {% if u.active %}<button class="linkbtn" name="action" value="deactivate">Deactivate</button>{% else %}<button class="linkbtn" name="action" value="activate">Activate</button>{% endif %}
         </form>
+        {% if not user or user.id != u.id %}
+        <form method="post" action="/admin/user" onsubmit="var n=prompt('This permanently deletes {{ u.name }} with all predictions and scores. Type the name to confirm:');if(n===null)return false;this.confirm_name.value=n;">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="user_id" value="{{ u.id }}"><input type="hidden" name="confirm_name" value="">
+          <button class="linkbtn" name="action" value="purge">Delete permanently</button>
+        </form>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}
