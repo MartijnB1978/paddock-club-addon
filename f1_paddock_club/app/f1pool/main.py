@@ -371,13 +371,14 @@ async def forgot(request: Request):
     ip = request.client.host if request.client else "?"
     if not auth.throttled("forgot" + ip, limit=5):
         auth.record_fail("forgot" + ip)
-        u = db.q1("SELECT * FROM users WHERE lower(email)=lower(?) AND active=1", email)
-        if u:
+        u = db.q1("SELECT * FROM users WHERE (lower(email)=lower(?) OR lower(name)=lower(?)) AND active=1",
+                  email, email)
+        if u and u["email"]:
             tok = auth.make_token(u["id"], "reset", 2)
             mailer.send(u["email"], "Reset your Paddock Club password",
                         f"Hi {u['name']},\n\nSet a new password here (valid for 2 hours):\n"
                         f"{mailer.base_url()}/reset/{tok}\n\nIf you didn't ask for this, ignore this mail.")
-    flash(request, "If that address belongs to a player, a reset link is on its way.")
+    flash(request, "If that name or address belongs to a player with an e-mail address, a reset link is on its way.")
     return redirect("/login")
 
 
