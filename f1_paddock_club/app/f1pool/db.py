@@ -2,6 +2,7 @@
 import logging
 import os
 import sqlite3
+import sys
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -141,8 +142,18 @@ def set_setting(key, value):
        key, value)
 
 
+_activity = logging.getLogger("activity")
+if not _activity.handlers:      # own handler: uvicorn's logging setup would otherwise swallow INFO
+    _h = logging.StreamHandler(sys.stdout)
+    _h.setFormatter(logging.Formatter("%(asctime)s activity %(levelname)s: %(message)s", "%H:%M:%S"))
+    _activity.addHandler(_h)
+    _activity.setLevel(logging.INFO)
+    _activity.propagate = False
+
+
 def logmsg(level, msg):
     # mirror the Activity feed to the add-on log so it can be read from Home Assistant
-    logging.getLogger("activity").log(logging.WARNING if level in ("warning", "error") else logging.INFO, msg)
+    _activity.log(logging.WARNING if level in ("warning", "error") else logging.INFO, msg)
+    _h_flush = [h.flush() for h in _activity.handlers]
     ex("INSERT INTO log(ts,level,msg) VALUES(?,?,?)", iso(now_utc()), level, msg[:2000])
     ex("DELETE FROM log WHERE id < (SELECT MAX(id)-500 FROM log)")
