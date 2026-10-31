@@ -102,6 +102,8 @@ def short(name):
 
 templates.env.filters["short"] = short
 templates.env.globals["LABELS"] = scoring.LABELS
+# cache-busting: changes whenever the static files change, so browsers never use a stale stylesheet
+templates.env.globals["ASSET_V"] = int(max((HERE / "static" / f).stat().st_mtime for f in ("style.css", "app.js")))
 
 
 def current_user(request):
