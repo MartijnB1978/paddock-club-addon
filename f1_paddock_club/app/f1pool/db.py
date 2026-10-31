@@ -1,4 +1,5 @@
 """SQLite storage. One file in the add-on's /data folder (included in HA backups)."""
+import logging
 import os
 import sqlite3
 import threading
@@ -141,5 +142,7 @@ def set_setting(key, value):
 
 
 def logmsg(level, msg):
+    # mirror the Activity feed to the add-on log so it can be read from Home Assistant
+    logging.getLogger("activity").log(logging.WARNING if level in ("warning", "error") else logging.INFO, msg)
     ex("INSERT INTO log(ts,level,msg) VALUES(?,?,?)", iso(now_utc()), level, msg[:2000])
     ex("DELETE FROM log WHERE id < (SELECT MAX(id)-500 FROM log)")
