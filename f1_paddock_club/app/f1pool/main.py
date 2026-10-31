@@ -774,7 +774,8 @@ def admin_event(request: Request, event_id: int):
                             "WHERE event_id=?", event_id), fields=scoring.fields_for_event(ev),
                   votes=db.q("SELECT * FROM dotd_votes WHERE event_id=? ORDER BY rank", event_id),
                   entries=None if ev["imported"] else entry_status(ev), year=ev["year"],
-                  swaps=db.q("SELECT * FROM driver_swaps WHERE event_id=?", event_id))
+                  swaps=db.q("SELECT * FROM driver_swaps WHERE event_id=?", event_id),
+                  season_drivers=sorted(driver_map(ev["year"]).values(), key=lambda d: d["name"]))
 
 
 @app.post("/admin/event/{event_id}")

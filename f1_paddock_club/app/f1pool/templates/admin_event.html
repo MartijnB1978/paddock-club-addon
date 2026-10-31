@@ -56,7 +56,7 @@
   {% endfor %}
   <form method="post" class="stack" onsubmit="return confirm('Clear picks of the driver who is out and e-mail those players?');">
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="swap">
-    <label>Driver who is out<select name="out_tla" required><option value="">–</option>{% for d in drivers %}<option value="{{ d.tla }}">{{ d.tla }}  {{ d.name }}</option>{% endfor %}</select></label>
+    <label>Driver who is out<select name="out_tla" required><option value="">–</option>{% for d in season_drivers %}<option value="{{ d.tla }}">{{ d.tla }}  {{ d.name }}</option>{% endfor %}</select></label>
     <label>Replacement: 3-letter code<input name="in_tla" maxlength="3" required placeholder="HIR" style="text-transform:uppercase"></label>
     <label>Replacement: full name<input name="in_name" required placeholder="Ryo Hirakawa"></label>
     <button class="btn small">Replace driver</button>
