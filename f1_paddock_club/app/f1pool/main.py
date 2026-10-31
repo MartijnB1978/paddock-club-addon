@@ -773,7 +773,8 @@ def admin_event(request: Request, event_id: int):
                   pens=db.q("SELECT p.*, u.name FROM penalties p JOIN users u ON u.id=p.user_id "
                             "WHERE event_id=?", event_id), fields=scoring.fields_for_event(ev),
                   votes=db.q("SELECT * FROM dotd_votes WHERE event_id=? ORDER BY rank", event_id),
-                  entries=None if ev["imported"] else entry_status(ev), year=ev["year"])
+                  entries=None if ev["imported"] else entry_status(ev), year=ev["year"],
+                  swaps=db.q("SELECT * FROM driver_swaps WHERE event_id=?", event_id))
 
 
 @app.post("/admin/event/{event_id}")
@@ -825,6 +826,57 @@ async def admin_event_save(request: Request, event_id: int):
             return redirect(f"/admin/event/{event_id}")
         engine.save_dotd(ev, found)
         flash(request, f"Driver of the Day: {found['votes'][0]['name']}.")
+    elif action == "swap":
+        if ev["frozen"] or ev["imported"]:
+            flash(request, "This weekend is frozen.", "err")
+            return redirect(f"/admin/event/{event_id}")
+        out_tla = (form.get("out_tla") or "").strip().upper()
+        in_tla = (form.get("in_tla") or "").strip().upper()
+        in_name = (form.get("in_name") or "").strip()
+        if not out_tla or len(in_tla) != 3 or not in_tla.isalpha() or not in_name or in_tla == out_tla:
+            flash(request, "Choose the driver who is out, and enter the replacement's 3-letter code and name.", "err")
+            return redirect(f"/admin/event/{event_id}")
+        out = db.q1("SELECT name FROM entrants WHERE event_id=? AND tla=?", event_id, out_tla)
+        out_name = out["name"] if out else out_tla
+        with db.tx() as c:
+            c.execute("INSERT OR REPLACE INTO driver_swaps VALUES(?,?,?,?,?)",
+                      (event_id, out_tla, in_tla, in_name, db.iso(db.now_utc())))
+            db.apply_driver_swaps(c, event_id)
+        # clear picks of the outgoing driver in parts that are still open, and tell those players
+        open_fields = [f for f in scoring.fields_for_event(ev) if f != "fp" and not is_locked(event_id, f)]
+        hit = defaultdict(list)
+        if open_fields:
+            ph = ",".join("?" * len(open_fields))
+            for r in db.q(f"SELECT DISTINCT user_id, field FROM predictions WHERE event_id=? AND value=? "
+                          f"AND field IN ({ph})", event_id, out_tla, *open_fields):
+                hit[r["user_id"]].append(scoring.LABELS[r["field"]])
+            db.ex(f"DELETE FROM predictions WHERE event_id=? AND value=? AND field IN ({ph})",
+                  event_id, out_tla, *open_fields)
+        link = f"{mailer.base_url()}/predict/{event_id}"
+        names, mailed = [], 0
+        for uid, parts in hit.items():
+            usr = db.q1("SELECT * FROM users WHERE id=?", uid)
+            if not usr:
+                continue
+            names.append(usr["name"])
+            if usr["active"] and usr["email"] and mailer.send(
+                    usr["email"], f"{ev['name']}: {out_name} is out, please pick again",
+                    f"Hi {usr['name']},\n\n{in_name} replaces {out_name} at the {ev['name']}. "
+                    f"You had picked {out_name} for:\n- " + "\n- ".join(parts)
+                    + f"\n\nThat pick has been cleared. Please choose again before the deadline:\n{link}"
+                    "\n\nPaddock Club Reeuwijk"):
+                mailed += 1
+        db.logmsg("info", f"{ev['name']}: {in_name} ({in_tla}) replaces {out_name} ({out_tla}); "
+                          f"picks cleared for {', '.join(sorted(names)) or 'nobody'}")
+        flash(request, f"{in_name} replaces {out_name}. "
+                       + (f"Picks cleared for {', '.join(sorted(names))}; {mailed} e-mailed." if names
+                          else "Nobody had picked them in an open part."))
+    elif action == "unswap":
+        with db.tx() as c:
+            c.execute("DELETE FROM driver_swaps WHERE event_id=? AND out_tla=?",
+                      (event_id, (form.get("out_tla") or "").upper()))
+        engine.force("entrants")
+        flash(request, "Replacement removed; the driver list is reloaded from F1 shortly.")
     elif action == "refetch":
         db.ex("UPDATE sessions SET last_fetch=NULL WHERE event_id=?", event_id)
         engine.force("finalise")

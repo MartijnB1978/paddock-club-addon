@@ -167,6 +167,7 @@ class Engine:
                 if d["team"]:
                     c.execute("INSERT INTO teams(year,name,colour) VALUES(?,?,?) ON CONFLICT(year,name) "
                               "DO UPDATE SET colour=excluded.colour", (ev["year"], d["team"], d["colour"]))
+            db.apply_driver_swaps(c, ev["id"])
         self.bump()
 
     def backfill_entrants(self, year):

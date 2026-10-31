@@ -46,6 +46,24 @@
   {% if false %}
   {% endif %}
 </section>
+{% if not ev.frozen and not ev.imported %}
+<section class="card">
+  <h2>Driver replaced</h2>
+  <p class="muted small">For a stand-in driver. The replacement goes into the driver list straight away, even if F1's list hasn't updated yet. Picks of the driver who is out are cleared in parts that are still open, and those players get an e-mail asking them to pick again.</p>
+  {% for sw in swaps %}
+  <p>{{ sw.in_name }} ({{ sw.in_tla }}) replaces {{ sw.out_tla }}
+    <form method="post" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="out_tla" value="{{ sw.out_tla }}"><button class="linkbtn" name="action" value="unswap">Undo</button></form></p>
+  {% endfor %}
+  <form method="post" class="stack" onsubmit="return confirm('Clear picks of the driver who is out and e-mail those players?');">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="swap">
+    <label>Driver who is out<select name="out_tla" required><option value="">–</option>{% for d in drivers %}<option value="{{ d.tla }}">{{ d.tla }}  {{ d.name }}</option>{% endfor %}</select></label>
+    <label>Replacement: 3-letter code<input name="in_tla" maxlength="3" required placeholder="HIR" style="text-transform:uppercase"></label>
+    <label>Replacement: full name<input name="in_name" required placeholder="Ryo Hirakawa"></label>
+    <button class="btn small">Replace driver</button>
+  </form>
+</section>
+{% endif %}
+
 <section class="card">
   <h2>Penalties</h2>
   <ul class="list">{% for p in pens %}<li><b>{{ p.name }}</b> −{{ p.points }} {{ p.reason }}

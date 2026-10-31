@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS sessions(
 CREATE TABLE IF NOT EXISTS entrants(
   event_id INTEGER, number TEXT, tla TEXT, name TEXT, team TEXT, colour TEXT, headshot TEXT,
   PRIMARY KEY(event_id, tla));
+CREATE TABLE IF NOT EXISTS driver_swaps(
+  event_id INTEGER, out_tla TEXT, in_tla TEXT, in_name TEXT, created_at TEXT,
+  PRIMARY KEY(event_id, out_tla));
 CREATE TABLE IF NOT EXISTS teams(
   year INTEGER, name TEXT, colour TEXT, logo_url TEXT, logo_checked TEXT,
   PRIMARY KEY(year, name));
@@ -114,6 +117,17 @@ def ex(sql, *args):
 
 def init():
     conn().executescript(SCHEMA)
+
+
+def apply_driver_swaps(c, event_id):
+    """Keep admin-entered driver replacements in force, even when F1's driver list is still the old one."""
+    for sw in c.execute("SELECT * FROM driver_swaps WHERE event_id=?", (event_id,)).fetchall():
+        has_in = c.execute("SELECT 1 FROM entrants WHERE event_id=? AND tla=?", (event_id, sw["in_tla"])).fetchone()
+        if has_in:
+            c.execute("DELETE FROM entrants WHERE event_id=? AND tla=?", (event_id, sw["out_tla"]))
+        else:
+            c.execute("UPDATE entrants SET tla=?, name=?, headshot='' WHERE event_id=? AND tla=?",
+                      (sw["in_tla"], sw["in_name"], event_id, sw["out_tla"]))
 
 
 def setting(key, default=None):
