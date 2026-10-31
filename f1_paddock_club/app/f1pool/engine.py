@@ -321,7 +321,11 @@ class Engine:
             self._last_flush = time.time()
             data, pits = live.state.snapshot()
             self.apply_state(s, data, pits, "live")
-            if lt.is_finished(data):
+            info = data.get("SessionInfo") or {}
+            same_session = not info.get("Name") or info["Name"].lower() == (s["name"] or "").lower()
+            started = db.now_utc() >= db.parse_iso(s["start_utc"])
+            # before the start the feed still carries the previous session's 'Finalised' status
+            if lt.is_finished(data) and same_session and started:
                 db.ex("UPDATE sessions SET status='finished', finished_at=? WHERE id=?",
                       db.iso(db.now_utc()), s["id"])
                 self.on_session_finished(s)
