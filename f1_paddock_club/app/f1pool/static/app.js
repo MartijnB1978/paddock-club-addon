@@ -17,6 +17,16 @@
   }
   tick(); setInterval(tick, 1000);
 
+  // session clock (Q1/Q2/Q3 time remaining), ticks locally between server updates
+  function clockTick() {
+    document.querySelectorAll("[data-remaining-until]").forEach(function (el) {
+      var s = Math.max(0, Math.round((new Date(el.dataset.remainingUntil) - new Date()) / 1000));
+      var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+      el.textContent = (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(sec).padStart(2, "0");
+    });
+  }
+  clockTick(); setInterval(clockTick, 1000);
+
   // colour the driver selects with the team colour
   document.querySelectorAll("select.dsel").forEach(function (s) {
     function paint() {

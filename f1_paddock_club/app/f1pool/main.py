@@ -248,7 +248,8 @@ def live_panel():
     votes = db.q("SELECT * FROM dotd_votes WHERE event_id=? AND pct IS NOT NULL ORDER BY rank LIMIT 5",
                  s["event_id"]) if s["kind"] == "R" else []
     return {"session": s, "rows": rows, "extra": extra, "votes": votes,
-            "is_live": bool(sid and sid == s["id"]), "status": engine.live_status}
+            "is_live": bool(sid and sid == s["id"]), "status": engine.live_status,
+            "clock": engine.live_clock if sid and sid == s["id"] else None}
 
 
 def event_grid(ev, only_locked=False):

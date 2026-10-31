@@ -30,6 +30,8 @@ class Engine:
         self.live = None                 # LiveClient
         self.live_session = None         # sessions row id
         self.live_status = "idle"
+        self.live_clock = None           # {'part', 'end_utc'|None, 'remaining', 'running'}
+        self._flag_at = None             # when the chequered flag came out in the final part
         self._dirty = False
         self._last_flush = 0.0
         self._next = {}
@@ -325,8 +327,17 @@ class Engine:
             info = data.get("SessionInfo") or {}
             same_session = not info.get("Name") or info["Name"].lower() == (s["name"] or "").lower()
             started = db.now_utc() >= db.parse_iso(s["start_utc"])
+            if same_session and started:
+                self.update_clock(s, data)
+            # final part over (Q3 / SQ3 / race / sprint) and the flag is out: wait for every car
+            part = lt.session_part(data)
+            last_part = s["kind"] not in ("Q", "SQ") or part == 3
+            if same_session and started and last_part and lt.flag_out(data) and not self._flag_at:
+                self._flag_at = time.time()
+            # all cars in: 'Finalised'. Safety net if that status never arrives: 10 min after the flag
+            done = lt.is_finished(data) or (self._flag_at and time.time() - self._flag_at > 600)
             # before the start the feed still carries the previous session's 'Finalised' status
-            if lt.is_finished(data) and same_session and started:
+            if done and same_session and started:
                 db.ex("UPDATE sessions SET status='finished', finished_at=? WHERE id=?",
                       db.iso(db.now_utc()), s["id"])
                 self.on_session_finished(s)
@@ -336,6 +347,23 @@ class Engine:
         self._dirty = True
         self.wake.set()
 
+    def update_clock(self, s, data):
+        c = lt.clock(data)
+        if not c:
+            return
+        part = lt.session_part(data)
+        label = (("SQ" if s["kind"] == "SQ" else "Q") + str(part)) if s["kind"] in ("Q", "SQ") and part else None
+        end = None
+        if c["running"] and c["utc"]:
+            t = db.parse_iso(c["utc"])
+            if t:
+                end = t + timedelta(seconds=c["remaining"])
+        new = {"part": label, "end_utc": end.isoformat() if end else None,
+               "remaining": c["remaining"], "running": c["running"]}
+        if new != self.live_clock:
+            self.live_clock = new
+            self.bump()
+
     def stop_live(self, why):
         if self.live:
             self.live.stop()
@@ -343,6 +371,8 @@ class Engine:
         self.live = None
         self.live_session = None
         self.live_status = "idle"
+        self.live_clock = None
+        self._flag_at = None
 
     def apply_state(self, s, data, pits, source):
         """Write derived results (+ standings) from a timing state."""

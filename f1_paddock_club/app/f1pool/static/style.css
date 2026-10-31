@@ -236,3 +236,4 @@ section + section{margin-top:28px}
 .savestate{display:inline-block;margin:8px 0 0 12px;font-size:.88rem;font-weight:600}
 .savestate.ok{color:var(--green)} .savestate.err{color:var(--red)} .savestate.busy{color:var(--muted)}
 .js-hide[hidden]{display:none}
+.clock{margin:4px 0 0;font-variant-numeric:tabular-nums;font-size:.95rem}.clock b{color:var(--text)}

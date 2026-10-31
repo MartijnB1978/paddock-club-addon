@@ -199,7 +199,40 @@ def session_status(data):
 
 
 def is_finished(data):
-    return session_status(data) in ("Finished", "Finalised", "Ends")
+    """Classification is final: every car has taken the chequered flag."""
+    return session_status(data) in ("Finalised", "Ends")
+
+
+def flag_out(data):
+    """Chequered flag shown; cars may still be completing their last lap."""
+    return session_status(data) == "Finished"
+
+
+def session_part(data):
+    """Qualifying part (1-3) or None."""
+    part = (data.get("TimingData") or {}).get("SessionPart")
+    if not part:
+        series = ((data.get("SessionData") or {}).get("Series")) or {}
+        for k in sorted(series, key=lambda x: int(x) if str(x).isdigit() else 0):
+            if (series[k] or {}).get("QualifyingPart"):
+                part = series[k]["QualifyingPart"]
+    try:
+        return int(part) if part else None
+    except (TypeError, ValueError):
+        return None
+
+
+def clock(data):
+    """{'remaining': seconds at 'utc', 'running': bool} from ExtrapolatedClock, or None."""
+    c = data.get("ExtrapolatedClock") or {}
+    rem = c.get("Remaining")
+    if not rem:
+        return None
+    try:
+        h, m, sec = (float(x) for x in rem.split(":"))
+    except ValueError:
+        return None
+    return {"remaining": int(h * 3600 + m * 60 + sec), "utc": c.get("Utc"), "running": bool(c.get("Extrapolating"))}
 
 
 def derive(kind, data, pit_events, drivers=None):
