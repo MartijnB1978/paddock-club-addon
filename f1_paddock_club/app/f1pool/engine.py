@@ -32,6 +32,7 @@ class Engine:
         self.live_status = "idle"
         self.live_clock = None           # {'part', 'end_utc'|None, 'remaining', 'running'}
         self._flag_at = None             # when the chequered flag came out in the final part
+        self._from_feed = set()          # sessions scored from the live feed while waiting for the archive
         self._dirty = False
         self._last_flush = 0.0
         self._next = {}
@@ -347,6 +348,33 @@ class Engine:
         self._dirty = True
         self.wake.set()
 
+    def results_from_feed(self, s, ev_name):
+        """Archive not published yet: the live feed still holds the final state of the session just run."""
+        if self.live:
+            return
+        client = lt.LiveClient(self.tokens, lambda: None)
+        try:
+            client.start()
+            t0 = time.time()
+            while time.time() - t0 < 25 and not client.last_msg:
+                time.sleep(0.5)
+            time.sleep(2)
+            data, pits = client.state.snapshot()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("feed grab failed: %s", exc)
+            return
+        finally:
+            client.stop()
+        info = data.get("SessionInfo") or {}
+        if (info.get("Name") or "").lower() != (s["name"] or "").lower() or not lt.is_finished(data) \
+                or not lt.classification(data):
+            return
+        self.apply_state(s, data, pits, "live")
+        self._from_feed.add(s["id"])
+        db.logmsg("info", f"Results for {ev_name} {s['name']} taken from the live feed; "
+                          f"official confirmation follows when F1 publishes them")
+        self.bump()
+
     def update_clock(self, s, data):
         c = lt.clock(data)
         if not c:
@@ -469,6 +497,9 @@ class Engine:
             st = self.http.session_state(s["path"])
             db.ex("UPDATE sessions SET last_fetch=? WHERE id=?", db.iso(now), s["id"])
             ev_name = db.q1("SELECT name FROM events WHERE id=?", s["event_id"])["name"]
+            if not (st and lt.classification(st.data)) and now - ended < timedelta(hours=3) \
+                    and s["id"] not in self._from_feed and self.due(f"feedgrab{s['id']}", 600):
+                self.results_from_feed(s, ev_name)
             if not (st and lt.classification(st.data)) and not last:
                 db.logmsg("warning", f"Official results for {ev_name} {s['name']} not available yet "
                                      f"({self.http.timing_status}, {s['path']}); retrying every 2 minutes")
