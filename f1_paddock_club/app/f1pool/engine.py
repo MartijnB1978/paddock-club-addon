@@ -16,6 +16,7 @@ log = logging.getLogger("engine")
 
 FREEZE_AFTER = timedelta(hours=48)
 REFETCH_EVERY = timedelta(hours=2)
+RETRY_EVERY = timedelta(minutes=2)     # official results not in yet: keep trying quickly
 LIVE_PRE = timedelta(minutes=15)
 REMIND_BEFORE = timedelta(hours=1)
 REMIND_MIN_LEFT = timedelta(minutes=10)
@@ -79,7 +80,7 @@ class Engine:
         if self.due("logos", 24 * 3600):
             self.resolve_logos(year)
         self.handle_live(now)
-        if self.due("finalise", 300):
+        if self.due("finalise", 60):
             self.finalise(now)
         if self.due("standings", 6 * 3600):
             self.fallback_standings(year)
@@ -419,13 +420,16 @@ class Engine:
             if s["id"] == self.live_session:
                 continue
             ended = start + timedelta(minutes=DURATION[s["kind"]])
-            if now < ended + timedelta(minutes=20):
+            # live timing saw the end -> go straight away; otherwise from the scheduled end
+            if s["status"] not in ("finished", "final") and now < ended:
                 continue
             if now - start > timedelta(days=4) and not db.q1(
                     "SELECT 1 FROM predictions WHERE event_id=? LIMIT 1", s["event_id"]):
                 continue    # old weekend nobody played in the app: nothing to score
             last = db.parse_iso(s["last_fetch"])
-            if last and now - last < REFETCH_EVERY:
+            quick = s["status"] != "final" and now - ended < timedelta(hours=3)
+            every = RETRY_EVERY if quick else REFETCH_EVERY
+            if last and now - last < every:
                 continue
             if not s["path"]:
                 # path appears in the official index once data exists
@@ -435,9 +439,9 @@ class Engine:
             st = self.http.session_state(s["path"])
             db.ex("UPDATE sessions SET last_fetch=? WHERE id=?", db.iso(now), s["id"])
             ev_name = db.q1("SELECT name FROM events WHERE id=?", s["event_id"])["name"]
-            if not (st and lt.classification(st.data)):
+            if not (st and lt.classification(st.data)) and not last:
                 db.logmsg("warning", f"Official results for {ev_name} {s['name']} not available yet "
-                                     f"({self.http.timing_status}, {s['path']}); retrying in 2 hours")
+                                     f"({self.http.timing_status}, {s['path']}); retrying every 2 minutes")
             if st and lt.classification(st.data):
                 if s["status"] != "final":
                     db.logmsg("info", f"Official results loaded: {ev_name} {s['name']}")
