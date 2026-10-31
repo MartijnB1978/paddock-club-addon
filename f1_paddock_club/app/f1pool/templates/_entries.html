@@ -1,0 +1,19 @@
+{% if entries and entries.rows %}
+<section class="card">
+  <h2>Predictions entered{% if show_name %}: <a href="/admin/event/{{ entries.ev.id }}">{{ entries.ev.name }}</a>{% endif %}</h2>
+  <p class="muted small">Green = complete, red = missing or incomplete (hover a light for the count). Picks themselves stay hidden until each session starts.</p>
+  <div class="tl-wrap">
+  <table class="tl">
+    <thead><tr><th></th>{% for c in entries.cols %}<th title="{{ c.title }}{% if c.lock %}, closes {{ c.lock|localtime }}{% endif %}">{{ c.label }}{% if c.locked %} <span class="muted">🔒</span>{% endif %}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for r in entries.rows %}
+    <tr><th scope="row">{{ r.user.name }}</th>
+      {% for c in r.cells %}<td><span class="light {{ 'on' if c.ok else 'off' }}" title="{{ LABELS[c.field] }}: {{ 'entered' if c.ok else ('not entered' if not c.n else c.n ~ ' of ' ~ c.need) }}"><span class="sr">{{ 'entered' if c.ok else 'not entered' }}</span></span></td>{% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><th scope="row" class="muted">Done</th>{% for c in entries.cols %}<td class="muted small">{{ c.done }}/{{ entries.rows|length }}</td>{% endfor %}</tr></tfoot>
+  </table>
+  </div>
+</section>
+{% endif %}

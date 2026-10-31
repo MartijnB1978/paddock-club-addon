@@ -221,3 +221,14 @@ section + section{margin-top:28px}
 .vp{text-align:right;font-variant-numeric:tabular-nums;font-size:.9rem}
 .panel .votes{max-width:none}
 .vh{margin:14px 0 2px;font-size:.85rem}
+
+/* admin: predictions entered traffic lights */
+.tl-wrap{overflow-x:auto}
+.tl{border-collapse:collapse;width:100%;min-width:420px}
+.tl th,.tl td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
+.tl thead th{font:600 .8rem var(--body);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.tl tbody th,.tl tfoot th{text-align:left;font-weight:600}
+.tl tfoot td,.tl tfoot th{border-bottom:0}
+.light{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle}
+.light.on{background:var(--green);box-shadow:0 0 6px rgba(47,210,111,.55)}
+.light.off{background:var(--red);box-shadow:0 0 6px rgba(255,90,95,.45)}

@@ -272,6 +272,33 @@ def event_grid(ev, only_locked=False):
     return res, rows, fields, visible
 
 
+SHORT = {"sprint_pole": "Sprint pole", "sprint_pos": "Sprint", "pole": "Qualifying", "race_pos": "Race",
+         "fl": "Fastest lap", "dotd": "DotD", "fp": "Pit stop"}
+
+
+def entry_status(ev):
+    """Per active player and per prediction part of a weekend: entered (all slots filled) or not."""
+    if not ev:
+        return None
+    fields = scoring.fields_for_event(ev)
+    have = defaultdict(int)
+    for r in db.q("SELECT user_id, field, COUNT(*) AS n FROM predictions WHERE event_id=? "
+                  "AND value IS NOT NULL AND value<>'' GROUP BY user_id, field", ev["id"]):
+        have[(r["user_id"], r["field"])] = r["n"]
+    rows, done = [], {f: 0 for f in fields}
+    for u in db.q("SELECT id, name FROM users WHERE active=1 ORDER BY name"):
+        cells = []
+        for f in fields:
+            need, n = scoring.FIELDS[f][0], have[(u["id"], f)]
+            ok = n >= need
+            done[f] += ok
+            cells.append({"field": f, "ok": ok, "n": n, "need": need})
+        rows.append({"user": u, "cells": cells, "all": all(c["ok"] for c in cells)})
+    cols = [{"field": f, "label": SHORT[f], "title": scoring.LABELS[f], "done": done[f],
+             "locked": is_locked(ev["id"], f), "lock": lock_utc(ev["id"], f)} for f in fields]
+    return {"ev": ev, "cols": cols, "rows": rows}
+
+
 LIVEGRID_AFTER = timedelta(hours=2)
 
 
@@ -638,7 +665,7 @@ def admin(request: Request):
     require_admin(request)
     users = db.q("SELECT * FROM users ORDER BY active DESC, name")
     ev = next_event()
-    return render(request, "admin.html", users=users, status=engine.status(), ev=ev,
+    return render(request, "admin.html", users=users, status=engine.status(), ev=ev, entries=entry_status(ev),
                   logs=db.q("SELECT * FROM log ORDER BY id DESC LIMIT 40"),
                   base_url=mailer.base_url(), smtp=mailer.configured(),
                   sync=json.loads(db.setting(f"schedule_sync_{db.now_utc().year}", "{}")),
@@ -744,7 +771,7 @@ def admin_event(request: Request, event_id: int):
                   pens=db.q("SELECT p.*, u.name FROM penalties p JOIN users u ON u.id=p.user_id "
                             "WHERE event_id=?", event_id), fields=scoring.fields_for_event(ev),
                   votes=db.q("SELECT * FROM dotd_votes WHERE event_id=? ORDER BY rank", event_id),
-                  year=ev["year"])
+                  entries=None if ev["imported"] else entry_status(ev), year=ev["year"])
 
 
 @app.post("/admin/event/{event_id}")
