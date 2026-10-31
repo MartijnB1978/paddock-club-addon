@@ -519,9 +519,10 @@ async def predict_save(request: Request, event_id: int):
     ts = db.iso(db.now_utc())
     for f in scoring.fields_for_event(ev):
         n = scoring.FIELDS[f][0]
+        keys = [f"{f}_{i}" for i in range(1, n + 1)]
+        if not any(k in form for k in keys):
+            continue    # field not sent (locked select, or auto-save of another field)
         vals = {i: (form.get(f"{f}_{i}") or "").strip() for i in range(1, n + 1)}
-        if not any(vals.values()):
-            continue
         if is_locked(ev["id"], f):
             skipped.append(scoring.LABELS[f])
             continue
@@ -547,8 +548,10 @@ async def predict_save(request: Request, event_id: int):
         msg.append("Not saved, deadline passed: " + ", ".join(skipped) + ".")
     if errors:
         msg.append(" ".join(errors))
-    flash(request, " ".join(msg) or "Nothing to save.", "err" if (errors or skipped) else "ok")
     engine.bump()
+    if request.headers.get("x-autosave") == "1":
+        return JSONResponse({"ok": not (errors or skipped), "msg": " ".join(msg) or "Saved."})
+    flash(request, " ".join(msg) or "Nothing to save.", "err" if (errors or skipped) else "ok")
     return redirect(f"/predict/{ev['id']}")
 
 
@@ -558,24 +561,28 @@ async def season_save(request: Request, year: int):
     form = await form_checked(request)
     sl = season_lock(year)
     nxt = form.get("back") or "/predict"
-    if not sl or db.now_utc() >= sl:
-        flash(request, "The championship prediction is closed.", "err")
+    auto = request.headers.get("x-autosave") == "1"
+
+    def done(msg, kind="ok"):
+        if auto:
+            return JSONResponse({"ok": kind == "ok", "msg": msg})
+        flash(request, msg, kind)
         return redirect(nxt)
+    if not sl or db.now_utc() >= sl:
+        return done("The championship prediction is closed.", "err")
     ev = next_event()
     valid = {d["tla"] for d in entrants(ev["id"], year)} if ev else set()
     vals = {i: (form.get(f"season_{i}") or "").strip() for i in range(1, 11)}
     picked = [v for v in vals.values() if v]
     if any(v not in valid for v in picked) or len(set(picked)) != len(picked):
-        flash(request, "Pick each driver only once.", "err")
-        return redirect(nxt)
+        return done("Pick each driver only once.", "err")
     with db.tx() as c:
         c.execute("DELETE FROM predictions WHERE user_id=? AND year=? AND event_id=0", (u["id"], year))
         for i, v in vals.items():
             if v:
                 c.execute("INSERT INTO predictions VALUES(?,?,?,?,?,?,?)",
                           (u["id"], year, 0, "season_pos", i, v, db.iso(db.now_utc())))
-    flash(request, "Championship prediction saved.")
-    return redirect(nxt)
+    return done("Championship prediction saved.")
 
 
 # ------------------------------------------------------------------ results

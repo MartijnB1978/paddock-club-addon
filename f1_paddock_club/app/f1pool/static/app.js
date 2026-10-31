@@ -50,6 +50,46 @@
     sync();
   });
 
+  // predictions: save every pick as soon as it is chosen (the save buttons stay as no-JS fallback)
+  var queue = Promise.resolve();
+  function badge(box) {
+    var b = box.querySelector(".savestate");
+    if (!b) {
+      b = document.createElement("span");
+      b.className = "savestate";
+      b.setAttribute("role", "status");
+      var anchorEl = box.querySelector(".lock") || box.querySelector("h2, legend");
+      if (anchorEl) anchorEl.insertAdjacentElement("afterend", b); else box.prepend(b);
+    }
+    return b;
+  }
+  function show(b, text, kind) {
+    b.textContent = text; b.className = "savestate " + kind;
+    clearTimeout(b._t);
+    if (kind === "ok") b._t = setTimeout(function () { b.textContent = ""; b.className = "savestate"; }, 2500);
+  }
+  document.querySelectorAll("form.predict[method=post]").forEach(function (form) {
+    form.querySelectorAll(".js-hide").forEach(function (el) { el.hidden = true; });
+    form.addEventListener("change", function (ev) {
+      var sel = ev.target;
+      if (!sel.name || sel.tagName !== "SELECT") return;
+      var field = sel.name.replace(/_\d+$/, "");
+      var fd = new FormData();
+      ["csrf", "back"].forEach(function (n) { if (form.elements[n]) fd.append(n, form.elements[n].value); });
+      form.querySelectorAll("select:not([disabled])").forEach(function (s) {
+        if (s.name.replace(/_\d+$/, "") === field) fd.append(s.name, s.value);
+      });
+      var b = badge(sel.closest("fieldset") || form);
+      show(b, "Saving…", "busy");
+      queue = queue.then(function () {
+        return fetch(form.action, {method: "POST", body: fd, headers: {"X-Autosave": "1"}, credentials: "same-origin"})
+          .then(function (r) { return r.json(); })
+          .then(function (j) { show(b, j.ok ? "✓ Saved" : j.msg, j.ok ? "ok" : "err"); })
+          .catch(function () { show(b, "Not saved. Reload the page and try again.", "err"); });
+      });
+    });
+  });
+
   // live F1 standings page: refresh tables on every change
   var f1 = document.getElementById("f1live");
   if (f1 && window.EventSource) {

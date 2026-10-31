@@ -72,8 +72,8 @@
         </select></label>
     </div>
   </fieldset>
-  <div class="actions"><button class="btn">Save predictions</button>
-    <span class="muted">You can change open predictions until each deadline.</span></div>
+  <div class="actions"><button class="btn js-hide">Save predictions</button>
+    <span class="muted">Every pick is saved as soon as you choose it. You can change open predictions until each deadline.</span></div>
 </form>
 {% endif %}
 
@@ -85,7 +85,8 @@
   <div class="slots">
   {% for i in range(1, 11) %}<label><span class="p">P{{ i }}</span>{{ driver_select('season_' ~ i, season_pick.get(i, ''), false, 'Championship P' ~ i) }}</label>{% endfor %}
   </div>
-  <div class="actions"><button class="btn">Save championship prediction</button></div>
+  <div class="actions"><button class="btn js-hide">Save championship prediction</button>
+    <span class="muted">Every pick is saved as soon as you choose it.</span></div>
 </form>
 {% endif %}
 {% endblock %}
