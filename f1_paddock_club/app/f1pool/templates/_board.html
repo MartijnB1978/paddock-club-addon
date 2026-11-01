@@ -32,7 +32,8 @@
         <h2>{{ s.ev_name }}</h2>
         <p class="muted">{{ s.name }}, {{ s.start_utc|localtime }}</p>
         {% set ck = panel.clock %}
-        {% if ck %}<p class="clock">{% if ck.part %}<b>{{ ck.part }}</b> · {% endif %}<span
+        {% if ck and ck.total is defined %}<p class="clock">{% if ck.lap %}Lap <b>{{ ck.lap }}</b>{% if ck.total %} of {{ ck.total }} · <b>{{ [ck.total - ck.lap, 0]|max }}</b> {{ 'lap' if ck.total - ck.lap == 1 else 'laps' }} remaining{% endif %}{% else %}{{ ck.total }} laps{% endif %}</p>
+        {% elif ck %}<p class="clock">{% if ck.part %}<b>{{ ck.part }}</b> · {% endif %}<span
           {% if ck.end_utc %}data-remaining-until="{{ ck.end_utc }}"{% endif %}>{{ ck|clockleft }}</span> remaining{% if not ck.running and ck.remaining > 0 %} (paused){% endif %}</p>{% endif %}
       </div>
       {% if panel.is_live %}<span class="badge live-dot">Live</span>

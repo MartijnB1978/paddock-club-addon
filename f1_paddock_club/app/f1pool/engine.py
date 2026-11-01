@@ -380,6 +380,13 @@ class Engine:
         self.bump()
 
     def update_clock(self, s, data):
+        if s["kind"] in ("R", "S"):          # races and sprints: laps, not time
+            lap, total = lt.lap_count(data)
+            new = {"lap": lap, "total": total, "part": None} if lap or total else None
+            if new and new != self.live_clock:
+                self.live_clock = new
+                self.bump()
+            return
         c = lt.clock(data)
         if not c:
             return
