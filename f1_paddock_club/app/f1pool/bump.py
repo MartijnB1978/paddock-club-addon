@@ -145,3 +145,87 @@ def report_svg(event_id):
                    f'<text x="{W - 2}" y="{y + 3.3:.1f}" font-size="10" fill="#5b6475" text-anchor="end">{p["total"]}</text>')
     out.append("</svg>")
     return "".join(out)
+
+
+# ------------------------------------------------------------- backfill ---
+REPLAY_TOPICS = ["DriverList", "SessionStatus", "TimingData", "TimingStats", "LapCount", "PitStopSeries", "PitStop"]
+
+
+def missing_laps(event_id):
+    have = {r["lap"] for r in db.q("SELECT DISTINCT lap FROM player_laps WHERE event_id=? AND lap>0", event_id)}
+    return sorted(set(range(1, max(have))) - have) if have else []
+
+
+def _stream(text):
+    """[(seconds since session start, message)] from a .jsonStream file."""
+    import json
+    out = []
+    for line in text.lstrip("﻿").splitlines():
+        line = line.strip().lstrip("﻿")
+        if len(line) < 13:
+            continue
+        try:
+            h, m, s = line[:12].split(":")
+            out.append((int(h) * 3600 + int(m) * 60 + float(s), json.loads(line[12:])))
+        except (ValueError, IndexError):
+            continue
+    return out
+
+
+def backfill(http, event_id, path):
+    """Replay the race from the F1 archive and fill laps the live recording missed. Returns laps added."""
+    from . import livetiming as lt
+    ev = db.q1("SELECT * FROM events WHERE id=?", event_id)
+    missing = set(missing_laps(event_id))
+    if not ev or not path or not missing:
+        return 0
+    msgs = []
+    for order, topic in enumerate(REPLAY_TOPICS):
+        text = http.get(f"{path}{topic}.jsonStream")
+        if not text:
+            if topic in ("TimingData", "LapCount"):
+                return 0
+            continue
+        msgs += [(ts, order, topic, m) for ts, m in _stream(text)]
+    msgs.sort(key=lambda x: (x[0], x[1]))
+
+    board, _, _ = scoring.leaderboard(ev["year"], upto_round=ev["round"])
+    pen = {}
+    for p in db.q("SELECT user_id, points FROM penalties WHERE event_id=?", event_id):
+        pen[p["user_id"]] = pen.get(p["user_id"], 0) + p["points"]
+    pre = {k: v for k, v in scoring.load_results(event_id).items() if k not in RACE_FIELDS}
+    preds, rules = scoring.load_predictions(event_id), scoring.rules_for(ev["year"])
+    known = {e["number"]: {"tla": e["tla"], "team": e["team"]}
+             for e in db.q("SELECT * FROM entrants WHERE event_id=?", event_id)}
+
+    st, cur, snaps = lt.TimingState(), 0, {}
+
+    def snap(lap):
+        data, pits = st.snapshot()
+        res = dict(pre) | lt.derive("R", data, pits, known)
+        rows = []
+        for r in board:
+            uid = r["user_id"]
+            before = r["total"] - r["events"].get(event_id, 0)
+            got = scoring.score_event(preds.get(uid, {}), res, rules)[0]
+            rows.append({"user_id": uid, "name": r["name"], "wins": r["wins"], "total": before + got - pen.get(uid, 0)})
+        snaps[lap] = _ordered(rows, "total")
+
+    for _ts, _o, topic, m in msgs:
+        if topic == "LapCount" and isinstance(m, dict):
+            try:
+                new = int(m.get("CurrentLap") or cur)
+            except (TypeError, ValueError):
+                new = cur
+            if new > cur >= 1 and cur in missing:
+                snap(cur)                      # state at the end of lap `cur`
+            cur = max(cur, new)
+        st.apply(topic, m)
+    if not snaps:
+        return 0
+    with db.tx() as c:
+        for lap, rows in snaps.items():
+            for rank, r in rows:
+                c.execute("INSERT OR IGNORE INTO player_laps VALUES(?,?,?,?,?)",
+                          (event_id, lap, r["user_id"], rank, r["total"]))
+    return len(snaps)

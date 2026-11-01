@@ -36,6 +36,7 @@ class Engine:
         self._dirty = False
         self._last_flush = 0.0
         self._bump_mark = (None, None, 0.0)   # (event, lap, time) of the last players' lap snapshot
+        self._backfill_at = {}                 # event id -> last archive replay attempt
         self._next = {}
         self._stop = threading.Event()
         self.wake = threading.Event()
@@ -427,7 +428,7 @@ class Engine:
         res = lt.derive(s["kind"], data, pits, known)
         self.write_results(ev_id, res, source)
         if s["kind"] == "R":
-            self.record_bump(ev_id, data)
+            self.record_bump(ev_id, data, s["path"])
         champ = lt.championship(data)
         if champ:
             num2tla = {k: v["tla"] for k, v in (drv or {}).items()} or {k: v["tla"] for k, v in known.items()}
@@ -448,7 +449,26 @@ class Engine:
                               (year, pos, team, pts, db.iso(db.now_utc())))
         self.bump()
 
-    def record_bump(self, ev_id, data):
+    def backfill_bump(self, ev_id, path, wait=False):
+        """Fill laps the live recording missed (e.g. before a restart) from the F1 archive, in the background."""
+        if not path or time.time() - self._backfill_at.get(ev_id, 0) < 300 or not bump.missing_laps(ev_id):
+            return
+        self._backfill_at[ev_id] = time.time()
+
+        def run():
+            try:
+                n = bump.backfill(self.http, ev_id, path)
+                if n:
+                    db.logmsg("info", f"Lap chart: {n} earlier laps filled in from the F1 archive")
+                    self.bump()
+            except Exception as exc:  # noqa: BLE001
+                db.logmsg("warning", f"Lap chart backfill failed: {exc}")
+        if wait:
+            run()
+        else:
+            threading.Thread(target=run, daemon=True).start()
+
+    def record_bump(self, ev_id, data, path=None):
         """Snapshot the players' standings once per lap (refreshed every 20 s within a lap)."""
         if lt.session_status(data) in (None, "", "Inactive"):
             return
@@ -461,6 +481,7 @@ class Engine:
         try:
             bump.record(ev_id, lap, total)
             self._bump_mark = (ev_id, lap, time.time())
+            self.backfill_bump(ev_id, path)
         except Exception as exc:  # noqa: BLE001  never let the chart break live results
             db.logmsg("warning", f"Lap chart snapshot failed: {exc}")
 
@@ -479,6 +500,8 @@ class Engine:
     def on_session_finished(self, s):
         if s["kind"] != "R":
             return
+        self._backfill_at.pop(s["event_id"], None)
+        self.backfill_bump(s["event_id"], s["path"])
         ev = db.q1("SELECT * FROM events WHERE id=?", s["event_id"])
         missing = []
         res = scoring.load_results(ev["id"])
