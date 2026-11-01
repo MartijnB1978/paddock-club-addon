@@ -243,7 +243,7 @@ TRACK_FLAGS = {"2": ("yellow", "Yellow flag"), "4": ("sc", "Safety car"), "5": (
                "6": ("vsc", "VSC"), "7": ("vsc", "VSC ending")}
 
 
-def rc_messages(data, limit=6):
+def rc_messages(data, limit=15):
     """Latest Race Control messages, newest first; blue flags (constant during a race) left out."""
     msgs = (data.get("RaceControlMessages") or {}).get("Messages") or {}
     items = [v for _k, v in sorted(msgs.items(), key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else -1)] \
