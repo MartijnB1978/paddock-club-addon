@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, db, dotd, importer, mailer, reports, scoring, standings
+from . import auth, bump, db, dotd, importer, mailer, reports, scoring, standings
 from .engine import Engine
 from .schedule import DURATION, SCORED
 
@@ -27,6 +27,7 @@ TZ = ZoneInfo(os.environ.get("TZ_DISPLAY", "Europe/Amsterdam"))
 HERE = Path(__file__).parent
 
 db.init()
+bump.init()
 _secret_file = DATA_DIR / "secret.key"
 if not _secret_file.exists():
     _secret_file.parent.mkdir(parents=True, exist_ok=True)
@@ -345,6 +346,7 @@ def home(request: Request, year: int | None = None):
     board, events, live_ev = scoring.leaderboard(year)
     dl = upcoming_deadlines()
     return render(request, "home.html", year=year, board=board, events=events, live_ev=live_ev,
+                  bc=bump.chart(year, (current_user(request) or {"id": None})["id"]),
                   panel=live_panel(), lg=live_grid() if current_user(request) else None, deadlines=dl, nxt=dl[0] if dl else None, drivers=driver_map(year),
                   teams=team_map(year), years=[r["year"] for r in db.q(
                       "SELECT DISTINCT year FROM events ORDER BY year DESC")])
@@ -356,6 +358,7 @@ def board_fragment(request: Request, year: int | None = None):
     board, events, live_ev = scoring.leaderboard(year)
     return templates.TemplateResponse(request, "_board.html", {
         "request": request, "board": board, "live_ev": live_ev, "panel": live_panel(),
+        "bc": bump.chart(year, (current_user(request) or {"id": None})["id"]),
         "user": current_user(request), "lg": live_grid() if current_user(request) else None,
         "nxt": (upcoming_deadlines(1) or [None])[0],
         "drivers": driver_map(year), "teams": team_map(year), "events": events})

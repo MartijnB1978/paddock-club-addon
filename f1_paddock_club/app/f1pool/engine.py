@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from . import db, dotd, livetiming as lt, scoring, mailer
+from . import bump, db, dotd, livetiming as lt, scoring, mailer
 from .f1auth import TokenManager
 from .schedule import DURATION, SCORED, sync as sync_schedule
 
@@ -35,6 +35,7 @@ class Engine:
         self._from_feed = set()          # sessions scored from the live feed while waiting for the archive
         self._dirty = False
         self._last_flush = 0.0
+        self._bump_mark = (None, None, 0.0)   # (event, lap, time) of the last players' lap snapshot
         self._next = {}
         self._stop = threading.Event()
         self.wake = threading.Event()
@@ -425,6 +426,8 @@ class Engine:
                 self.save_entrants(ev, drv)
         res = lt.derive(s["kind"], data, pits, known)
         self.write_results(ev_id, res, source)
+        if s["kind"] == "R":
+            self.record_bump(ev_id, data)
         champ = lt.championship(data)
         if champ:
             num2tla = {k: v["tla"] for k, v in (drv or {}).items()} or {k: v["tla"] for k, v in known.items()}
@@ -444,6 +447,22 @@ class Engine:
                     c.execute("INSERT OR REPLACE INTO team_standings VALUES(?,?,?,?,?)",
                               (year, pos, team, pts, db.iso(db.now_utc())))
         self.bump()
+
+    def record_bump(self, ev_id, data):
+        """Snapshot the players' standings once per lap (refreshed every 20 s within a lap)."""
+        if lt.session_status(data) in (None, "", "Inactive"):
+            return
+        lap, total = lt.lap_count(data)
+        if lap < 1:
+            return
+        ev, last, at = self._bump_mark
+        if ev == ev_id and last == lap and time.time() - at < 20:
+            return
+        try:
+            bump.record(ev_id, lap, total)
+            self._bump_mark = (ev_id, lap, time.time())
+        except Exception as exc:  # noqa: BLE001  never let the chart break live results
+            db.logmsg("warning", f"Lap chart snapshot failed: {exc}")
 
     def write_results(self, ev_id, res, source):
         ts = db.iso(db.now_utc())

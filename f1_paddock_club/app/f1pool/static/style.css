@@ -237,3 +237,30 @@ section + section{margin-top:28px}
 .savestate.ok{color:var(--green)} .savestate.err{color:var(--red)} .savestate.busy{color:var(--muted)}
 .js-hide[hidden]{display:none}
 .clock{margin:4px 0 0;font-variant-numeric:tabular-nums;font-size:.95rem}.clock b{color:var(--text)}
+
+/* players' positions lap by lap (bump chart) */
+.bump{grid-column:1/-1;background:var(--surface);border-radius:var(--r-m);padding:16px 18px}
+.bump .panel-head a{color:inherit}
+.bump-grid{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(120px,190px);gap:0 8px;padding-bottom:22px}
+.bump-pos{list-style:none;margin:0;padding:0;color:var(--muted);font:600 .8rem var(--display);text-align:right}
+.bump-pos li,.bump-names li{height:var(--row);line-height:var(--row)}
+.bump-plot{position:relative;height:calc(var(--n) * var(--row))}
+.bump-plot svg{display:block;width:100%;height:100%;overflow:visible}
+.bump-plot .tick{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.bump-plot polyline{fill:none;stroke:var(--c);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round;
+  vector-effect:non-scaling-stroke;opacity:.85;transition:opacity .2s,stroke-width .2s}
+.bump-plot polyline.me{stroke-width:4.5;opacity:1}
+.bump-plot svg:hover polyline{opacity:.25}.bump-plot svg:hover polyline:hover{opacity:1;stroke-width:4.5}
+.bump-x{position:absolute;left:0;right:0;top:100%;height:20px;color:var(--muted);font-size:.72rem}
+.bump-x span{position:absolute;top:4px;transform:translateX(-50%);white-space:nowrap}
+.bump-x span:first-child{transform:none}.bump-x .fin{transform:translateX(-100%)}
+.bump-names{list-style:none;margin:0;padding:0;position:relative;height:calc(var(--n) * var(--row))}
+.bump-names li{position:absolute;left:0;right:0;display:flex;align-items:center;gap:6px;font-size:.88rem;
+  transition:top .7s cubic-bezier(.2,.8,.2,1)}
+.bump-names i{flex:none;width:10px;height:10px;border-radius:50%;background:var(--c)}
+.bump-names .bn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.bump-names .bt{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+.bump-names li.me .bn{font-weight:700}
+.bump-names .mv{flex:none;font-size:.7rem;padding:0 4px}
+@media (max-width:480px){.bump{padding:14px 10px}.bump-grid{grid-template-columns:20px minmax(0,1fr) 112px;gap:0 6px}
+  .bump-names .mv{display:none}.bump-x .minor,.bump-x .lastlap{display:none}}

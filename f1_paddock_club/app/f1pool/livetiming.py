@@ -235,6 +235,15 @@ def clock(data):
     return {"remaining": int(h * 3600 + m * 60 + sec), "utc": c.get("Utc"), "running": bool(c.get("Extrapolating"))}
 
 
+def lap_count(data):
+    """(current lap, total laps) from LapCount; (0, 0) when unknown."""
+    lc = data.get("LapCount") or {}
+    try:
+        return int(lc.get("CurrentLap") or 0), int(lc.get("TotalLaps") or 0)
+    except (TypeError, ValueError):
+        return 0, 0
+
+
 def race_underway(data):
     """True once the race has started and at least one full lap is done.
 
