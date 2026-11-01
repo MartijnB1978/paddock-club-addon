@@ -33,7 +33,7 @@
         <p class="muted">{{ s.name }}, {{ s.start_utc|localtime }}</p>
         {% set ck = panel.clock %}
         {% if ck %}<p class="clock">{% if ck.part %}<b>{{ ck.part }}</b> · {% endif %}<span
-          {% if ck.end_utc %}data-remaining-until="{{ ck.end_utc }}"{% endif %}>{{ '%d:%02d'|format(ck.remaining // 60, ck.remaining % 60) }}</span> remaining{% if not ck.running and ck.remaining > 0 %} (paused){% endif %}</p>{% endif %}
+          {% if ck.end_utc %}data-remaining-until="{{ ck.end_utc }}"{% endif %}>{{ ck|clockleft }}</span> remaining{% if not ck.running and ck.remaining > 0 %} (paused){% endif %}</p>{% endif %}
       </div>
       {% if panel.is_live %}<span class="badge live-dot">Live</span>
       {% elif s.status == 'final' %}<span class="badge">Official</span>

@@ -25,6 +25,7 @@
       el.textContent = (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(sec).padStart(2, "0");
     });
   }
+  window.pcClockTick = clockTick;
   clockTick(); setInterval(clockTick, 1000);
 
   // colour the driver selects with the team colour
@@ -110,7 +111,7 @@
       if (f1busy) return; f1busy = true;
       var sx = Array.prototype.map.call(f1.querySelectorAll(".grid-wrap"), function (g) { return g.scrollLeft; });
       fetch(f1.dataset.url, {cache: "no-store"}).then(function (r) { return r.text(); }).then(function (html) {
-        f1.innerHTML = html;
+        f1.innerHTML = html; if (window.pcClockTick) window.pcClockTick();
         f1.querySelectorAll(".grid-wrap").forEach(function (g, i) { g.scrollLeft = sx[i] || 0; });
       }).finally(function () { f1busy = false; });
     };
@@ -130,7 +131,7 @@
     var before = positions();
     fetch("/fragment/board?year=" + year, {cache: "no-store"}).then(function (r) { return r.text(); })
       .then(function (html) {
-        board.innerHTML = html;
+        board.innerHTML = html; if (window.pcClockTick) window.pcClockTick();
         var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         board.querySelectorAll(".row").forEach(function (r) {
           var old = before[r.dataset.id];

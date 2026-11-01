@@ -5,7 +5,7 @@ import logging
 import os
 import secrets
 from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -101,6 +101,19 @@ def short(name):
 
 
 templates.env.filters["short"] = short
+
+
+def clockleft(ck):
+    """Session time left as h:mm:ss / m:ss, same format the browser ticks in."""
+    rem = ck.get("remaining") or 0
+    end = db.parse_iso(ck["end_utc"]) if ck.get("end_utc") else None
+    if end:
+        rem = max(0, int(round((end - datetime.now(timezone.utc)).total_seconds())))
+    h, m, sec = rem // 3600, rem % 3600 // 60, rem % 60
+    return f"{h}:{m:02d}:{sec:02d}" if h else f"{m}:{sec:02d}"
+
+
+templates.env.filters["clockleft"] = clockleft
 templates.env.globals["LABELS"] = scoring.LABELS
 # cache-busting: changes whenever the static files change, so browsers never use a stale stylesheet
 templates.env.globals["ASSET_V"] = int(max((HERE / "static" / f).stat().st_mtime for f in ("style.css", "app.js")))

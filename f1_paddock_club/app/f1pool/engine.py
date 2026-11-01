@@ -388,7 +388,11 @@ class Engine:
                 end = t + timedelta(seconds=c["remaining"])
         new = {"part": label, "end_utc": end.isoformat() if end else None,
                "remaining": c["remaining"], "running": c["running"]}
-        if new != self.live_clock:
+        old = self.live_clock
+        if old and end and old.get("end_utc") and old["running"] and old["part"] == label:
+            if abs((end - db.parse_iso(old["end_utc"])).total_seconds()) < 2:
+                return  # same countdown, just a newer timestamp: keep the browser ticking
+        if new != old:
             self.live_clock = new
             self.bump()
 
