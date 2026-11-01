@@ -267,3 +267,9 @@ section + section{margin-top:28px}
 
 /* never let a wide table widen the page: it scrolls inside its own box */
 #board-inner>*,main>*{min-width:0}
+
+/* live predictions grid: full page width so all picks fit without a scrollbar; on phones it still swipes */
+.livegrid{grid-column:1/-1}
+.livegrid .grid th,.livegrid .grid td{padding:8px 6px}
+.livegrid .grid-wrap{scrollbar-width:none}
+.livegrid .grid-wrap::-webkit-scrollbar{display:none}
