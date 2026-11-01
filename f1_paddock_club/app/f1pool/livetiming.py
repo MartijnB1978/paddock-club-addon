@@ -242,6 +242,9 @@ TRACK_FLAGS = {"2": ("yellow", "Yellow flag"), "4": ("sc", "Safety car"), "5": (
 def track_flag(data):
     """{'kind', 'label', 'restart_utc'} for a yellow / SC / VSC / red flag, None when the track is clear."""
     st = str((data.get("TrackStatus") or {}).get("Status") or "")
+    # a red-flagged race is reported as session 'Aborted' while the track itself shows 'AllClear'
+    if session_status(data) in ("Aborted", "Suspended"):
+        st = "5"
     if st not in TRACK_FLAGS:
         return None
     kind, label = TRACK_FLAGS[st]
