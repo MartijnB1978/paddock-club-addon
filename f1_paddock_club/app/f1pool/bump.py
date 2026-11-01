@@ -266,3 +266,87 @@ def backfill(http, event_id, path):
                 c.execute("INSERT OR IGNORE INTO player_laps VALUES(?,?,?,?,?)",
                           (event_id, lap, r["user_id"], rank, r["total"]))
     return len(snaps)
+
+
+def _lap_positions(data):
+    """{lap: [racing numbers in order]} from the live LapSeries topic (every driver's position per lap)."""
+    series = data.get("LapSeries") or {}
+    per = {}
+    for num, d in series.items():
+        lp = (d or {}).get("LapPosition") or {}
+        items = lp.items() if isinstance(lp, dict) else enumerate(lp)
+        for k, v in items:
+            try:
+                per.setdefault(int(k), []).append((int(v), str(num)))
+            except (TypeError, ValueError):
+                continue
+    if not per:
+        return {}
+    # index 0 is the grid when the leader's list is one longer than his completed laps
+    done = 0
+    for ln in ((data.get("TimingData") or {}).get("Lines") or {}).values():
+        try:
+            done = max(done, int((ln or {}).get("NumberOfLaps") or 0))
+        except (TypeError, ValueError, AttributeError):
+            pass
+    shift = 0 if max(per) + 1 > done else 1
+    return {k + shift: [n for _p, n in sorted(v)] for k, v in per.items() if k + shift >= 1}
+
+
+def backfill_series(event_id, data):
+    """Fill missed laps from the live feed: positions from LapSeries; fastest lap and fastest pit stop
+    only where the feed shows they had already happened by that lap. Returns laps added."""
+    missing = set(missing_laps(event_id))
+    order = _lap_positions(data)
+    laps = sorted(missing & set(order))
+    if not laps:
+        return 0
+    ev = db.q1("SELECT * FROM events WHERE id=?", event_id)
+    known = {e["number"]: e for e in db.q("SELECT * FROM entrants WHERE event_id=?", event_id)}
+    tla = lambda n: known[n]["tla"] if n in known else None          # noqa: E731
+    # fastest lap: current holder counts from the lap he set it on
+    fl_who, fl_lap = None, None
+    for num, ln in (((data.get("TimingStats") or {}).get("Lines")) or {}).items():
+        pb = (ln or {}).get("PersonalBestLapTime") or {}
+        if str(pb.get("Position")) == "1" and pb.get("Lap"):
+            try:
+                fl_who, fl_lap = tla(str(num)), int(pb["Lap"])
+            except (TypeError, ValueError):
+                pass
+    stops = []                                                         # (lap, seconds, team)
+    for num, ss in ((((data.get("PitStopSeries") or {}).get("PitTimes")) or {}).items()):
+        for st in (ss or {}).values() if isinstance(ss, dict) else []:
+            p = (st or {}).get("PitStop") or {}
+            try:
+                t, lap = float(p.get("PitStopTime")), int(p.get("Lap"))
+            except (TypeError, ValueError):
+                continue
+            if t > 0 and str(num) in known and known[str(num)]["team"]:
+                stops.append((lap, t, known[str(num)]["team"]))
+
+    board, _, _ = scoring.leaderboard(ev["year"], upto_round=ev["round"])
+    pen = {}
+    for p in db.q("SELECT user_id, points FROM penalties WHERE event_id=?", event_id):
+        pen[p["user_id"]] = pen.get(p["user_id"], 0) + p["points"]
+    pre = {k: v for k, v in scoring.load_results(event_id).items() if k not in RACE_FIELDS}
+    preds, rules = scoring.load_predictions(event_id), scoring.rules_for(ev["year"])
+    with db.tx() as c:
+        for lap in laps:
+            res = dict(pre)
+            res["race_pos"] = {i + 1: t for i, t in enumerate(filter(None, map(tla, order[lap]))) if i < 20}
+            if fl_who and fl_lap and fl_lap <= lap and lap >= 2:
+                res["fl"] = {1: fl_who}
+            done = [s for s in stops if s[0] <= lap]
+            if done:
+                res["fp"] = {1: min(done, key=lambda s: s[1])[2]}
+            rows = []
+            for r in board:
+                uid = r["user_id"]
+                before = r["total"] - r["events"].get(event_id, 0)
+                got = scoring.score_event(preds.get(uid, {}), res, rules)[0]
+                rows.append({"user_id": uid, "name": r["name"], "wins": r["wins"],
+                             "total": before + got - pen.get(uid, 0)})
+            for rank, r in _ordered(rows, "total"):
+                c.execute("INSERT OR IGNORE INTO player_laps VALUES(?,?,?,?,?)",
+                          (event_id, lap, r["user_id"], rank, r["total"]))
+    return len(laps)

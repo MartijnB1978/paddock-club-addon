@@ -19,7 +19,7 @@ NEGOTIATE_URL = "https://livetiming.formula1.com/signalrcore/negotiate"
 TOPICS = ["Heartbeat", "DriverList", "SessionInfo", "SessionStatus", "SessionData",
           "TimingData", "TimingStats", "TimingAppData", "LapCount", "TrackStatus",
           "ExtrapolatedClock", "TopThree", "ChampionshipPrediction",
-          "PitStopSeries", "PitStop", "PitLaneTimeCollection", "RaceControlMessages"]
+          "PitStopSeries", "PitStop", "PitLaneTimeCollection", "RaceControlMessages", "LapSeries"]
 # topics delivered as events (each message replaces the previous one)
 EVENT_TOPICS = {"PitStop"}
 STATIC_TOPICS = ["DriverList", "SessionInfo", "SessionStatus", "TimingData", "TimingStats",
