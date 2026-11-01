@@ -93,28 +93,55 @@ def conn():
     return c
 
 
+_stale_logged = set()
+
+
+def _settle(c, where):
+    """A connection must never sit in an open transaction outside tx(): commit it, and say so once."""
+    if c.in_transaction and not getattr(_local, "in_tx", False):
+        c.execute("COMMIT")
+        if where not in _stale_logged:
+            _stale_logged.add(where)
+            logging.getLogger("activity").warning("Database: open transaction committed (%s)", where)
+
+
 @contextmanager
 def tx():
     c = conn()
+    _settle(c, "before tx")
     c.execute("BEGIN IMMEDIATE")
+    _local.in_tx = True
     try:
         yield c
         c.execute("COMMIT")
-    except Exception:
+    except BaseException:
         c.execute("ROLLBACK")
         raise
+    finally:
+        _local.in_tx = False
 
 
 def q(sql, *args):
-    return conn().execute(sql, args).fetchall()
+    cur = conn().execute(sql, args)
+    try:
+        return cur.fetchall()
+    finally:
+        cur.close()
 
 
 def q1(sql, *args):
-    return conn().execute(sql, args).fetchone()
+    cur = conn().execute(sql, args)
+    try:
+        return cur.fetchone()
+    finally:
+        cur.close()                     # release the statement: an unfinished SELECT holds the transaction open
 
 
 def ex(sql, *args):
-    return conn().execute(sql, args)
+    c = conn()
+    cur = c.execute(sql, args)
+    _settle(c, " ".join(sql.split())[:40])
+    return cur
 
 
 def init():
