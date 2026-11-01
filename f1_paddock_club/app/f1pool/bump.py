@@ -273,7 +273,9 @@ def _lap_positions(data):
     series = data.get("LapSeries") or {}
     per = {}
     for num, d in series.items():
-        lp = (d or {}).get("LapPosition") or {}
+        if not isinstance(d, dict):
+            continue                       # e.g. the feed's '_kf' keyframe flag
+        lp = d.get("LapPosition") or {}
         items = lp.items() if isinstance(lp, dict) else enumerate(lp)
         for k, v in items:
             try:
@@ -285,10 +287,11 @@ def _lap_positions(data):
     # index 0 is the grid when the leader's list is one longer than his completed laps
     done = 0
     for ln in ((data.get("TimingData") or {}).get("Lines") or {}).values():
-        try:
-            done = max(done, int((ln or {}).get("NumberOfLaps") or 0))
-        except (TypeError, ValueError, AttributeError):
-            pass
+        if isinstance(ln, dict):
+            try:
+                done = max(done, int(ln.get("NumberOfLaps") or 0))
+            except (TypeError, ValueError):
+                pass
     shift = 0 if max(per) + 1 > done else 1
     return {k + shift: [n for _p, n in sorted(v)] for k, v in per.items() if k + shift >= 1}
 
@@ -307,16 +310,18 @@ def backfill_series(event_id, data):
     # fastest lap: current holder counts from the lap he set it on
     fl_who, fl_lap = None, None
     for num, ln in (((data.get("TimingStats") or {}).get("Lines")) or {}).items():
-        pb = (ln or {}).get("PersonalBestLapTime") or {}
-        if str(pb.get("Position")) == "1" and pb.get("Lap"):
+        pb = ln.get("PersonalBestLapTime") if isinstance(ln, dict) else None
+        if isinstance(pb, dict) and str(pb.get("Position")) == "1" and pb.get("Lap"):
             try:
                 fl_who, fl_lap = tla(str(num)), int(pb["Lap"])
             except (TypeError, ValueError):
                 pass
     stops = []                                                         # (lap, seconds, team)
     for num, ss in ((((data.get("PitStopSeries") or {}).get("PitTimes")) or {}).items()):
-        for st in (ss or {}).values() if isinstance(ss, dict) else []:
-            p = (st or {}).get("PitStop") or {}
+        for st in ss.values() if isinstance(ss, dict) else []:
+            p = st.get("PitStop") if isinstance(st, dict) else None
+            if not isinstance(p, dict):
+                continue
             try:
                 t, lap = float(p.get("PitStopTime")), int(p.get("Lap"))
             except (TypeError, ValueError):
