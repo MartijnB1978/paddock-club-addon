@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from . import bump, chat, db, dotd, livetiming as lt, scoring, mailer, track, weather
+from . import bump, chat, db, dotd, livetiming as lt, official, scoring, mailer, track, weather
 from .f1auth import TokenManager
 from .schedule import DURATION, SCORED, sync as sync_schedule
 
@@ -139,6 +139,12 @@ class Engine:
                 db.iso(now - timedelta(days=1)), db.iso(now + timedelta(days=8)))]
             weather.refresh(ids)
             self.bump()
+        if self.due("official", 900):
+            try:
+                if official.check(self, now):
+                    self.bump()
+            except Exception as exc:  # noqa: BLE001
+                db.logmsg("warning", f"Official results check failed: {exc}")
         if self.due("chat_archive", 6 * 3600):
             try:
                 moved, note = chat.archive_old()
@@ -421,6 +427,9 @@ class Engine:
             done = lt.is_finished(data) or (self._flag_at and time.time() - self._flag_at > 600)
             # before the start the feed still carries the previous session's 'Finalised' status
             if done and same_session and started:
+                drv = lt.driver_info(data)
+                order = [drv.get(n, {}).get("tla", n) for n in lt.classification(data)[:10]]
+                db.logmsg("info", f"{s['ev_name']} {s['name']} finished; F1 timing final order: {', '.join(order)}")
                 db.ex("UPDATE sessions SET status='finished', finished_at=? WHERE id=?",
                       db.iso(db.now_utc()), s["id"])
                 self.on_session_finished(s)
@@ -606,9 +615,14 @@ class Engine:
         ts = db.iso(db.now_utc())
         with db.tx() as c:
             for field, slots in res.items():
+                # admin corrections always win; the official (Jolpica) result wins over F1 timing data
+                keep = ("admin",) if source in ("admin", "official") else ("admin", "official")
+                marks = ",".join("?" * len(keep))
                 admin = {r["slot"] for r in c.execute(
-                    "SELECT slot FROM results WHERE event_id=? AND field=? AND source='admin'", (ev_id, field))}
-                c.execute("DELETE FROM results WHERE event_id=? AND field=? AND source!='admin'", (ev_id, field))
+                    f"SELECT slot FROM results WHERE event_id=? AND field=? AND source IN ({marks})",
+                    (ev_id, field, *keep))}
+                c.execute(f"DELETE FROM results WHERE event_id=? AND field=? AND source NOT IN ({marks})",
+                          (ev_id, field, *keep))
                 for slot, val in slots.items():
                     if slot not in admin and val:
                         c.execute("INSERT OR REPLACE INTO results VALUES(?,?,?,?,?,?)",
