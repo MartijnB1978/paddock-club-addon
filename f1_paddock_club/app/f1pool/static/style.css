@@ -72,7 +72,7 @@ label{display:flex;flex-direction:column;gap:4px;font-size:.92rem;color:var(--mu
 .next b{color:var(--text);font-weight:600}
 .next time{display:block;font-family:var(--display);font-size:1.4rem;color:var(--amber);text-align:right}
 #board-inner{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;align-items:start}
-@media (max-width:860px){#board-inner{grid-template-columns:1fr}.next{margin:0}.next time{text-align:left}}
+@media (max-width:860px){#board-inner{grid-template-columns:minmax(0,1fr)}.next{margin:0}.next time{text-align:left}}
 
 /* timing tower: the signature element */
 .tower{background:var(--surface);border-radius:var(--r-m);overflow:hidden}
@@ -264,3 +264,6 @@ section + section{margin-top:28px}
 .bump-names .mv{flex:none;font-size:.7rem;padding:0 4px}
 @media (max-width:480px){.bump{padding:14px 10px}.bump-grid{grid-template-columns:20px minmax(0,1fr) 112px;gap:0 6px}
   .bump-names .mv{display:none}.bump-x .minor,.bump-x .lastlap{display:none}}
+
+/* never let a wide table widen the page: it scrolls inside its own box */
+#board-inner>*,main>*{min-width:0}
