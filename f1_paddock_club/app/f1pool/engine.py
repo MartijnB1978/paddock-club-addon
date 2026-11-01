@@ -87,6 +87,8 @@ class Engine:
         self.handle_live(now)
         if self.due("finalise", 60):
             self.finalise(now)
+        if self.due("bump_catchup", 120):
+            self.bump_catchup(now)
         if self.due("standings", 6 * 3600):
             self.fallback_standings(year)
         if self.due("backfill", 3600):
@@ -467,6 +469,14 @@ class Engine:
             run()
         else:
             threading.Thread(target=run, daemon=True).start()
+
+    def bump_catchup(self, now):
+        """After a race, keep replaying the archive (every 5 min, for 2 days) until every lap is in the chart:
+        during the race F1 only publishes the first laps, the complete file follows afterwards."""
+        for s in db.q("SELECT s.* FROM sessions s JOIN race_laps l ON l.event_id=s.event_id WHERE s.kind='R' "
+                      "AND s.finished_at IS NOT NULL AND s.start_utc>=?", db.iso(now - timedelta(days=2))):
+            if s["id"] != self.live_session:
+                self.backfill_bump(s["event_id"], s["path"])
 
     def record_bump(self, ev_id, data, path=None):
         """Snapshot the players' standings once per lap (refreshed every 20 s within a lap)."""
