@@ -125,6 +125,20 @@
     var file = document.getElementById("chat-file"), prev = document.getElementById("chat-preview");
     var errBox = document.getElementById("chat-err"), bar = document.getElementById("chat-progress");
     var last = Number(chatBox.dataset.last) || 0, first = Number(chatBox.dataset.first) || 0, csrf = chatBox.dataset.csrf;
+    var since = chatBox.dataset.now, skew = new Date(chatBox.dataset.now) - new Date();   // server clock minus ours
+    function serverNow() { return new Date(Date.now() + skew); }
+    function expireEdits() {
+      list.querySelectorAll(".edit").forEach(function (b) {
+        if (new Date(b.dataset.until) <= serverNow() && !b.closest(".msg").classList.contains("editing")) b.remove();
+      });
+    }
+    function swap(m) {
+      var li = list.querySelector('[data-id="' + m.id + '"]');
+      if (!li || li.classList.contains("editing")) return;
+      if (m.deleted) { li.remove(); return; }
+      var tmp = document.createElement("ol"); tmp.innerHTML = m.html;
+      li.replaceWith(tmp.firstElementChild);
+    }
     function nearBottom() { return log.scrollHeight - log.scrollTop - log.clientHeight < 120; }
     function toBottom() { log.scrollTop = log.scrollHeight; }
     function add(msgs, atTop) {
@@ -142,8 +156,14 @@
     }
     function poll() {
       if (document.hidden) return;
-      fetch("/chat/messages?after=" + last, {cache: "no-store", credentials: "same-origin"})
-        .then(function (r) { return r.json(); }).then(function (d) { add(d.messages || []); }).catch(function () {});
+      var upto = last;
+      fetch("/chat/messages?after=" + last + "&since=" + encodeURIComponent(since || ""), {cache: "no-store", credentials: "same-origin"})
+        .then(function (r) { return r.json(); }).then(function (d) {
+          (d.changed || []).forEach(function (m) { if (m.id <= upto) swap(m); });
+          add(d.messages || []);
+          if (d.now) { since = d.now; skew = new Date(d.now) - new Date(); }
+          expireEdits();
+        }).catch(function () {});
     }
     function showErr(msg) { errBox.textContent = msg || ""; errBox.hidden = !msg; }
     function grow() { text.style.height = "auto"; text.style.height = Math.min(text.scrollHeight, 140) + "px"; }
@@ -184,7 +204,43 @@
       xhr.onerror = function () { btn.disabled = false; bar.hidden = true; showErr("No connection, try again."); };
       xhr.send(fd);
     });
+    setInterval(expireEdits, 5000);
     list.addEventListener("click", function (e) {
+      var eb = e.target.closest(".edit");
+      if (eb) {
+        var li = eb.closest(".msg");
+        if (li.classList.contains("editing")) return;
+        li.classList.add("editing");
+        var txt = li.querySelector(".txt");
+        var ed = document.createElement("div"); ed.className = "editbox";
+        ed.innerHTML = '<textarea rows="2" maxlength="2000" aria-label="Edit message"></textarea>' +
+          '<div class="editbar"><span class="left"></span><button type="button" class="cancel">Cancel</button><button type="button" class="save btn">Save</button></div>';
+        var ta = ed.querySelector("textarea"); ta.value = txt ? txt.dataset.raw : "";
+        if (txt) txt.hidden = true;
+        li.querySelector(".meta").after(ed); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+        var left = ed.querySelector(".left");
+        var tick = setInterval(function () {
+          var s = Math.max(0, Math.round((new Date(eb.dataset.until) - serverNow()) / 1000));
+          left.textContent = s + " s left to edit";
+          if (!s) { left.textContent = "Edit time is over"; ed.querySelector(".save").disabled = true; }
+        }, 500);
+        function close() { clearInterval(tick); ed.remove(); if (txt) txt.hidden = false; li.classList.remove("editing"); expireEdits(); }
+        ed.querySelector(".cancel").addEventListener("click", close);
+        function save() {
+          var fd = new FormData(); fd.append("csrf", csrf); fd.append("text", ta.value);
+          fetch("/chat/edit/" + eb.dataset.id, {method: "POST", body: fd, credentials: "same-origin"})
+            .then(function (r) { return r.json(); }).then(function (d) {
+              if (d.ok) { clearInterval(tick); li.classList.remove("editing"); swap(d.message); }
+              else { left.textContent = d.msg || "Saving failed."; }
+            });
+        }
+        ed.querySelector(".save").addEventListener("click", save);
+        ta.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); save(); }
+          if (ev.key === "Escape") close();
+        });
+        return;
+      }
       var b = e.target.closest(".del"); if (!b || !confirm("Delete this message?")) return;
       var fd = new FormData(); fd.append("csrf", csrf);
       fetch("/chat/delete/" + b.dataset.id, {method: "POST", body: fd, credentials: "same-origin"})

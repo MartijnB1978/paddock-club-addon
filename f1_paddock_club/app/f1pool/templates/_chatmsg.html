@@ -1,6 +1,6 @@
 <li class="msg{{ ' mine' if m.user_id == user.id }}" data-id="{{ m.id }}">
-  <div class="meta"><b>{{ m.name }}</b><time datetime="{{ m.created_at }}">{{ m.created_at|localtime('%a %d %b %H:%M') }}</time>{% if m.user_id == user.id or user.is_admin %}<button type="button" class="del" data-id="{{ m.id }}" aria-label="Delete this message" title="Delete">×</button>{% endif %}</div>
-  {% if m.text %}<div class="txt">{{ m.text|chattext }}</div>{% endif %}
+  <div class="meta"><b>{{ m.name }}</b><time datetime="{{ m.created_at }}">{{ m.created_at|localtime('%a %d %b %H:%M') }}</time>{% if m.edited_at %}<span class="edited" title="Edited">edited</span>{% endif %}{% set until = edit_until if edit_until is string else edit_until(m) %}{% if m.user_id == user.id and until > now %}<button type="button" class="edit" data-id="{{ m.id }}" data-until="{{ until }}" aria-label="Edit this message" title="Edit (first 2 minutes)">✎</button>{% endif %}{% if m.user_id == user.id or user.is_admin %}<button type="button" class="del" data-id="{{ m.id }}" aria-label="Delete this message" title="Delete">×</button>{% endif %}</div>
+  {% if m.text %}<div class="txt" data-raw="{{ m.text }}">{{ m.text|chattext }}</div>{% endif %}
   {% if m.media_id %}{% if m.kind == 'image' %}<a class="media" href="/chat/media/{{ m.media_id }}" target="_blank" rel="noopener"><img src="/chat/media/{{ m.media_id }}" alt="Photo shared by {{ m.name }}" loading="lazy"{% if m.width %} width="{{ m.width }}" height="{{ m.height }}"{% endif %}></a>
   {% elif m.kind == 'video' %}<video class="media" src="/chat/media/{{ m.media_id }}" controls playsinline preload="metadata"></video>{% endif %}{% endif %}
 </li>

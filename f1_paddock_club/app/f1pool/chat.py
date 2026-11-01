@@ -21,6 +21,8 @@ MAX_TEXT = 2000
 MAX_IMAGE = 10 * 1024 * 1024
 MAX_VIDEO = 50 * 1024 * 1024
 IMAGE_EDGE = 1600
+EDIT_WINDOW = timedelta(seconds=120)
+EDIT_GRACE = timedelta(seconds=5)       # network delay between pressing Save and the server receiving it
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS chat_media(
@@ -34,6 +36,9 @@ CREATE TABLE IF NOT EXISTS chat_seen(user_id INTEGER PRIMARY KEY, last_id INTEGE
 
 def init():
     db.conn().executescript(SCHEMA)
+    cols = {r["name"] for r in db.q("PRAGMA table_info(chat_messages)")}
+    if "edited_at" not in cols:
+        db.ex("ALTER TABLE chat_messages ADD COLUMN edited_at TEXT")
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -162,6 +167,32 @@ def post(user_id, text, media_id=None):
     return cur.lastrowid
 
 
+def edit_until(m):
+    """ISO time until which the author may still edit this message."""
+    return db.iso(db.parse_iso(m["created_at"]) + EDIT_WINDOW)
+
+
+def edit(msg_id, user, text):
+    m = db.q1("SELECT * FROM chat_messages WHERE id=? AND deleted=0", msg_id)
+    if not m or m["user_id"] != user["id"]:
+        raise ChatError("You can only edit your own messages.")
+    if db.now_utc() > db.parse_iso(m["created_at"]) + EDIT_WINDOW + EDIT_GRACE:
+        raise ChatError("Messages can only be edited in the first 2 minutes.")
+    text = (text or "").strip()[:MAX_TEXT]
+    if not text and not m["media_id"]:
+        raise ChatError("A message can't be empty; delete it instead.")
+    if text != (m["text"] or ""):
+        db.ex("UPDATE chat_messages SET text=?, edited_at=? WHERE id=?", text, db.iso(db.now_utc()), msg_id)
+    return True
+
+
+def changed(since, upto_id):
+    """Messages already shown that were edited or deleted since `since` (ISO time)."""
+    return db.q("SELECT m.*, u.name, x.kind, x.width, x.height FROM chat_messages m JOIN users u ON u.id=m.user_id "
+                "LEFT JOIN chat_media x ON x.id=m.media_id WHERE m.id<=? AND m.edited_at>? ORDER BY m.id",
+                upto_id, since)
+
+
 def messages(after=0, before=None, limit=60):
     sql = ("SELECT m.*, u.name, x.kind, x.width, x.height FROM chat_messages m JOIN users u ON u.id=m.user_id "
            "LEFT JOIN chat_media x ON x.id=m.media_id WHERE m.deleted=0 AND m.id>?")
@@ -177,7 +208,7 @@ def delete(msg_id, user):
     m = db.q1("SELECT * FROM chat_messages WHERE id=?", msg_id)
     if not m or (m["user_id"] != user["id"] and not user["is_admin"]):
         return False
-    db.ex("UPDATE chat_messages SET deleted=1, text='' WHERE id=?", msg_id)
+    db.ex("UPDATE chat_messages SET deleted=1, text='', edited_at=? WHERE id=?", db.iso(db.now_utc()), msg_id)
     if m["media_id"]:
         x = db.q1("SELECT path FROM chat_media WHERE id=?", m["media_id"])
         if x and Path(x["path"]).is_file():

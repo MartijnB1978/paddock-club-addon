@@ -457,7 +457,10 @@ _chat_msg = templates.env.get_template("_chatmsg.html")
 
 
 def _chat_json(rows, user):
-    return [{"id": m["id"], "html": _chat_msg.render(m=m, user=user)} for m in rows]
+    now = db.iso(db.now_utc())
+    return [{"id": m["id"], "deleted": bool(m["deleted"]),
+             "html": "" if m["deleted"] else _chat_msg.render(m=m, user=user, now=now, edit_until=chat.edit_until(m))}
+            for m in rows]
 
 
 @app.get("/chat", response_class=HTMLResponse)
@@ -466,16 +469,36 @@ def chat_page(request: Request):
     rows = chat.messages()
     if rows:
         chat.mark_seen(user["id"], rows[-1]["id"])
-    return render(request, "chat.html", rows=rows, chat_unread=0)
+    return render(request, "chat.html", rows=rows, chat_unread=0, now=db.iso(db.now_utc()),
+                  edit_until=chat.edit_until)
 
 
 @app.get("/chat/messages")
-def chat_messages(request: Request, after: int = 0, before: int = 0):
+def chat_messages(request: Request, after: int = 0, before: int = 0, since: str = ""):
     user = require_user(request)
+    now = db.iso(db.now_utc())
     rows = chat.messages(before=before, limit=40) if before else chat.messages(after=after)
     if rows and not before:
         chat.mark_seen(user["id"], rows[-1]["id"])
-    return JSONResponse({"messages": _chat_json(rows, user), "more": bool(before) and len(rows) == 40})
+    out = {"messages": _chat_json(rows, user), "more": bool(before) and len(rows) == 40, "now": now}
+    if since and not before:
+        out["changed"] = _chat_json(chat.changed(since, after), user)
+    return JSONResponse(out)
+
+
+@app.post("/chat/edit/{msg_id}")
+async def chat_edit(request: Request, msg_id: int):
+    user = require_user(request)
+    form = await request.form()
+    if not auth.csrf_ok(request.session, form.get("csrf")):
+        return JSONResponse({"ok": False, "msg": "Session expired, reload the page."}, status_code=403)
+    try:
+        chat.edit(msg_id, user, form.get("text") or "")
+    except chat.ChatError as exc:
+        return JSONResponse({"ok": False, "msg": str(exc)}, status_code=400)
+    m = db.q1("SELECT m.*, u.name, x.kind, x.width, x.height FROM chat_messages m JOIN users u ON u.id=m.user_id "
+              "LEFT JOIN chat_media x ON x.id=m.media_id WHERE m.id=?", msg_id)
+    return JSONResponse({"ok": True, "message": _chat_json([m], user)[0]})
 
 
 @app.post("/chat/send")

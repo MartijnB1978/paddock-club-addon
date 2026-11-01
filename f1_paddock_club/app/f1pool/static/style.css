@@ -343,3 +343,13 @@ section + section{margin-top:28px}
 .chat-err{color:var(--red);font-size:.85rem;margin:0;padding:0 16px 10px}
 @media (max-width:720px){.chat{height:calc(100vh - 260px)}.msg{max-width:92%}}
 .preview[hidden],.progress[hidden],.chat-err[hidden]{display:none}
+
+.msg .edit{background:none;border:0;color:var(--muted);cursor:pointer;font-size:.9rem;padding:0 2px;margin-left:auto}
+.msg .edit + .del{margin-left:4px}
+.msg .edit:hover{color:var(--text)}
+.msg .edited{font-style:italic}
+.editbox textarea{width:100%;box-sizing:border-box;min-width:220px;background:var(--asphalt);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;resize:vertical}
+.editbar{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:.75rem;color:var(--muted)}
+.editbar .left{margin-right:auto}
+.editbar button{font-size:.8rem;padding:3px 10px}
+.editbar .cancel{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;cursor:pointer}
