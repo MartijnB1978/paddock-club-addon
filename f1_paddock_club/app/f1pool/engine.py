@@ -335,7 +335,15 @@ class Engine:
             started = db.now_utc() >= db.parse_iso(s["start_utc"])
             if same_session and started:
                 self.update_clock(s, data)
-                flag = lt.track_flag(data)
+                try:
+                    flag = lt.track_flag(data)
+                except Exception as exc:  # noqa: BLE001
+                    flag = None
+                    db.logmsg("warning", f"Track status failed: {exc}")
+                raw = (data.get("TrackStatus"), lt.session_status(data))
+                if raw != getattr(self, "_flag_raw", None):
+                    self._flag_raw = raw
+                    db.logmsg("info", f"Track status: {raw[0]}, session {raw[1]} -> {flag}")
                 if flag != self.live_flag:
                     self.live_flag = flag
                     self.bump()
