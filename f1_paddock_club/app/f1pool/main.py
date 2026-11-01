@@ -10,12 +10,13 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, bump, db, dotd, track, weather, importer, mailer, reports, scoring, standings
+from . import auth, bump, chat, db, dotd, track, weather, importer, mailer, reports, scoring, standings
 from .engine import Engine
 from .livetiming import car_positions as lt_positions
 from .schedule import DURATION, SCORED
@@ -29,6 +30,7 @@ HERE = Path(__file__).parent
 
 db.init()
 bump.init()
+chat.init()
 _secret_file = DATA_DIR / "secret.key"
 if not _secret_file.exists():
     _secret_file.parent.mkdir(parents=True, exist_ok=True)
@@ -116,6 +118,7 @@ def clockleft(ck):
 
 
 templates.env.filters["clockleft"] = clockleft
+templates.env.filters["chattext"] = lambda t: Markup(chat.render_text(t))
 templates.env.globals["wx_get"] = lambda eid: weather.get(eid)
 templates.env.globals["LABELS"] = scoring.LABELS
 # cache-busting: changes whenever the static files change, so browsers never use a stale stylesheet
@@ -132,6 +135,7 @@ def current_user(request):
 
 def render(request, name, **ctx):
     user = current_user(request)
+    ctx.setdefault("chat_unread", chat.unread(user["id"]) if user else 0)
     ctx.update(request=request, user=user, csrf=auth.csrf_token(request.session),
                year=ctx.get("year") or default_year(), flash=request.session.pop("flash", None))
     return templates.TemplateResponse(request, name, ctx)
@@ -446,6 +450,67 @@ async def stream(request: Request):
             await asyncio.sleep(2 if engine.live else 10)
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ------------------------------------------------------------------ chat
+_chat_msg = templates.env.get_template("_chatmsg.html")
+
+
+def _chat_json(rows, user):
+    return [{"id": m["id"], "html": _chat_msg.render(m=m, user=user)} for m in rows]
+
+
+@app.get("/chat", response_class=HTMLResponse)
+def chat_page(request: Request):
+    user = require_user(request)
+    rows = chat.messages()
+    if rows:
+        chat.mark_seen(user["id"], rows[-1]["id"])
+    return render(request, "chat.html", rows=rows, chat_unread=0)
+
+
+@app.get("/chat/messages")
+def chat_messages(request: Request, after: int = 0, before: int = 0):
+    user = require_user(request)
+    rows = chat.messages(before=before, limit=40) if before else chat.messages(after=after)
+    if rows and not before:
+        chat.mark_seen(user["id"], rows[-1]["id"])
+    return JSONResponse({"messages": _chat_json(rows, user), "more": bool(before) and len(rows) == 40})
+
+
+@app.post("/chat/send")
+async def chat_send(request: Request):
+    user = require_user(request)
+    form = await request.form(max_files=1)
+    if not auth.csrf_ok(request.session, form.get("csrf")):
+        return JSONResponse({"ok": False, "msg": "Session expired, reload the page."}, status_code=403)
+    try:
+        media_id = None
+        up = form.get("file")
+        if up is not None and getattr(up, "filename", ""):
+            media_id = await asyncio.to_thread(chat.save_upload, up.file, up.filename)
+        chat.post(user["id"], form.get("text") or "", media_id)
+    except chat.ChatError as exc:
+        return JSONResponse({"ok": False, "msg": str(exc)}, status_code=400)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/chat/delete/{msg_id}")
+async def chat_delete(request: Request, msg_id: int):
+    user = require_user(request)
+    form = await request.form()
+    if not auth.csrf_ok(request.session, form.get("csrf")):
+        return JSONResponse({"ok": False}, status_code=403)
+    return JSONResponse({"ok": chat.delete(msg_id, user)})
+
+
+@app.get("/chat/media/{media_id}")
+def chat_media(request: Request, media_id: int):
+    require_user(request)
+    m = chat.media(media_id)
+    if not m:
+        return HTMLResponse("Not found", status_code=404)
+    return FileResponse(m["path"], media_type=m["mime"], headers={"Cache-Control": "private, max-age=604800"})
 
 
 @app.get("/rules", response_class=HTMLResponse)

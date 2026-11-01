@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from . import bump, db, dotd, livetiming as lt, scoring, mailer, track, weather
+from . import bump, chat, db, dotd, livetiming as lt, scoring, mailer, track, weather
 from .f1auth import TokenManager
 from .schedule import DURATION, SCORED, sync as sync_schedule
 
@@ -99,6 +99,15 @@ class Engine:
                 db.iso(now - timedelta(days=1)), db.iso(now + timedelta(days=8)))]
             weather.refresh(ids)
             self.bump()
+        if self.due("chat_archive", 6 * 3600):
+            try:
+                moved, note = chat.archive_old()
+                if moved:
+                    db.logmsg("info", f"Chat: {moved} photos/videos older than 3 months moved to the Synology archive")
+                elif note and self.due("chat_archive_note", 7 * 86400):
+                    db.logmsg("warning", f"Chat archive: {note}; old media stay on the Pi for now")
+            except Exception as exc:  # noqa: BLE001
+                db.logmsg("warning", f"Chat archive failed: {exc}")
         if self.due("bump_catchup", 120):
             self.bump_catchup(now)
         if self.due("standings", 6 * 3600):

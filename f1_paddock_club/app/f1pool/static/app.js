@@ -117,6 +117,89 @@
     };
   }
 
+  // chat: poll for new messages, send text/photo/video with upload progress
+  var chatBox = document.getElementById("chat");
+  if (chatBox) {
+    var log = document.getElementById("chat-log"), list = document.getElementById("chat-msgs");
+    var form = document.getElementById("chat-form"), text = document.getElementById("chat-text");
+    var file = document.getElementById("chat-file"), prev = document.getElementById("chat-preview");
+    var errBox = document.getElementById("chat-err"), bar = document.getElementById("chat-progress");
+    var last = Number(chatBox.dataset.last) || 0, first = Number(chatBox.dataset.first) || 0, csrf = chatBox.dataset.csrf;
+    function nearBottom() { return log.scrollHeight - log.scrollTop - log.clientHeight < 120; }
+    function toBottom() { log.scrollTop = log.scrollHeight; }
+    function add(msgs, atTop) {
+      if (!msgs.length) return;
+      var empty = list.querySelector(".empty"); if (empty) empty.remove();
+      var stick = nearBottom(), h = log.scrollHeight;
+      msgs.forEach(function (m) {
+        if (list.querySelector('[data-id="' + m.id + '"]')) return;
+        var tmp = document.createElement("ol"); tmp.innerHTML = m.html;
+        var li = tmp.firstElementChild;
+        if (atTop) list.insertBefore(li, list.firstChild); else list.appendChild(li);
+        if (!atTop) last = Math.max(last, m.id); else first = Math.min(first || m.id, m.id);
+      });
+      if (atTop) log.scrollTop += log.scrollHeight - h; else if (stick) toBottom();
+    }
+    function poll() {
+      if (document.hidden) return;
+      fetch("/chat/messages?after=" + last, {cache: "no-store", credentials: "same-origin"})
+        .then(function (r) { return r.json(); }).then(function (d) { add(d.messages || []); }).catch(function () {});
+    }
+    function showErr(msg) { errBox.textContent = msg || ""; errBox.hidden = !msg; }
+    function grow() { text.style.height = "auto"; text.style.height = Math.min(text.scrollHeight, 140) + "px"; }
+    toBottom();
+    setInterval(poll, 4000);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) poll(); });
+    text.addEventListener("input", grow);
+    text.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+    });
+    file.addEventListener("change", function () {
+      var f = file.files[0];
+      if (!f) { prev.hidden = true; return; }
+      var isVid = /^video\//.test(f.type), max = (isVid ? 50 : 10) * 1024 * 1024;
+      if (f.size > max) { showErr((isVid ? "Videos" : "Photos") + " can be at most " + (isVid ? 50 : 10) + " MB."); file.value = ""; prev.hidden = true; return; }
+      showErr("");
+      document.getElementById("chat-fname").textContent = (isVid ? "🎬 " : "🖼️ ") + f.name + " (" + (f.size / 1048576).toFixed(1) + " MB)";
+      prev.hidden = false;
+    });
+    document.getElementById("chat-unfile").addEventListener("click", function () { file.value = ""; prev.hidden = true; });
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (!text.value.trim() && !file.files.length) return;
+      var fd = new FormData(form); fd.append("csrf", csrf);
+      var btn = document.getElementById("chat-send"); btn.disabled = true; showErr("");
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", "/chat/send");
+      if (file.files.length) {
+        bar.hidden = false;
+        xhr.upload.onprogress = function (ev) { if (ev.lengthComputable) bar.firstElementChild.style.width = (ev.loaded / ev.total * 100) + "%"; };
+      }
+      xhr.onload = function () {
+        var d = {}; try { d = JSON.parse(xhr.responseText); } catch (x) {}
+        btn.disabled = false; bar.hidden = true; bar.firstElementChild.style.width = "0";
+        if (xhr.status === 200 && d.ok) { form.reset(); prev.hidden = true; grow(); poll(); setTimeout(toBottom, 300); }
+        else showErr(d.msg || "Sending failed, try again.");
+      };
+      xhr.onerror = function () { btn.disabled = false; bar.hidden = true; showErr("No connection, try again."); };
+      xhr.send(fd);
+    });
+    list.addEventListener("click", function (e) {
+      var b = e.target.closest(".del"); if (!b || !confirm("Delete this message?")) return;
+      var fd = new FormData(); fd.append("csrf", csrf);
+      fetch("/chat/delete/" + b.dataset.id, {method: "POST", body: fd, credentials: "same-origin"})
+        .then(function (r) { return r.json(); }).then(function (d) { if (d.ok) b.closest(".msg").remove(); });
+    });
+    var older = document.getElementById("chat-older");
+    if (older) older.addEventListener("click", function () {
+      fetch("/chat/messages?before=" + first, {cache: "no-store", credentials: "same-origin"})
+        .then(function (r) { return r.json(); }).then(function (d) {
+          add((d.messages || []).slice().reverse(), true);
+          if (!d.more) older.remove();
+        });
+    });
+  }
+
   // live standings page: refresh on every change, keep the track map element alive
   var livebox = document.getElementById("live");
   if (livebox && window.EventSource) {

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="home-head"><h1>Chat</h1><p class="muted">Paddock Club Reeuwijk members only. Text, links, photos (max 10 MB) and short videos (max 50 MB).</p></div>
+<section class="chat" id="chat" data-csrf="{{ csrf }}" data-last="{{ rows[-1].id if rows else 0 }}" data-first="{{ rows[0].id if rows else 0 }}">
+  <div class="chat-log" id="chat-log" tabindex="0" aria-label="Chat messages" aria-live="polite">
+    {% if rows|length >= 60 %}<button type="button" class="older" id="chat-older">Show older messages</button>{% endif %}
+    <ol class="msgs" id="chat-msgs">
+      {% for m in rows %}{% include "_chatmsg.html" %}{% else %}<li class="empty muted">No messages yet. Say hello!</li>{% endfor %}
+    </ol>
+  </div>
+  <form class="chat-form" id="chat-form" autocomplete="off">
+    <label class="attach" title="Add a photo or video"><input type="file" name="file" id="chat-file" accept="image/*,video/mp4,video/quicktime,video/webm"><span aria-hidden="true">📎</span><span class="sr">Add a photo or video</span></label>
+    <div class="compose">
+      <div class="preview" id="chat-preview" hidden><span id="chat-fname"></span><button type="button" id="chat-unfile" aria-label="Remove attachment">×</button></div>
+      <textarea name="text" id="chat-text" rows="1" maxlength="2000" placeholder="Message the Paddock Club…" aria-label="Message"></textarea>
+      <div class="progress" id="chat-progress" hidden><span></span></div>
+    </div>
+    <button class="btn" type="submit" id="chat-send">Send</button>
+  </form>
+  <p class="chat-err" id="chat-err" role="alert" hidden></p>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/app.js?v={{ ASSET_V }}"></script>{% endblock %}

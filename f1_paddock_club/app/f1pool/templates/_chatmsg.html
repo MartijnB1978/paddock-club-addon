@@ -1,0 +1,6 @@
+<li class="msg{{ ' mine' if m.user_id == user.id }}" data-id="{{ m.id }}">
+  <div class="meta"><b>{{ m.name }}</b><time datetime="{{ m.created_at }}">{{ m.created_at|localtime('%a %d %b %H:%M') }}</time>{% if m.user_id == user.id or user.is_admin %}<button type="button" class="del" data-id="{{ m.id }}" aria-label="Delete this message" title="Delete">×</button>{% endif %}</div>
+  {% if m.text %}<div class="txt">{{ m.text|chattext }}</div>{% endif %}
+  {% if m.media_id %}{% if m.kind == 'image' %}<a class="media" href="/chat/media/{{ m.media_id }}" target="_blank" rel="noopener"><img src="/chat/media/{{ m.media_id }}" alt="Photo shared by {{ m.name }}" loading="lazy"{% if m.width %} width="{{ m.width }}" height="{{ m.height }}"{% endif %}></a>
+  {% elif m.kind == 'video' %}<video class="media" src="/chat/media/{{ m.media_id }}" controls playsinline preload="metadata"></video>{% endif %}{% endif %}
+</li>
