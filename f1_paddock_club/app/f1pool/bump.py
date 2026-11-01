@@ -179,9 +179,10 @@ def backfill(http, event_id, path):
     missing = set(missing_laps(event_id))
     if not ev or not path or not missing:
         return 0
-    msgs = []
+    msgs, seen = [], {}
     for order, topic in enumerate(REPLAY_TOPICS):
         text = http.get(f"{path}{topic}.jsonStream")
+        seen[topic] = http.last_status
         if not text:
             if topic in ("TimingData", "LapCount"):
                 return 0
@@ -199,6 +200,7 @@ def backfill(http, event_id, path):
              for e in db.q("SELECT * FROM entrants WHERE event_id=?", event_id)}
 
     st, cur, snaps = lt.TimingState(), 0, {}
+    laps_seen = []
 
     def snap(lap):
         data, pits = st.snapshot()
@@ -217,10 +219,16 @@ def backfill(http, event_id, path):
                 new = int(m.get("CurrentLap") or cur)
             except (TypeError, ValueError):
                 new = cur
+            laps_seen.append(new)
             if new > cur >= 1 and cur in missing:
                 snap(cur)                      # state at the end of lap `cur`
             cur = max(cur, new)
         st.apply(topic, m)
+    counts = {t: sum(1 for x in msgs if x[2] == t) for t in ("LapCount", "TimingData")}
+    db.logmsg("info", f"Lap chart replay: archive laps {min(laps_seen, default=0)}-{max(laps_seen, default=0)} "
+                      f"(first values {laps_seen[:5]}), messages {counts}, missing laps "
+                      f"{min(missing)}-{max(missing)} ({len(missing)}), filled {sorted(snaps)[:10]}, "
+                      f"source {seen.get('LapCount')}")
     if not snaps:
         return 0
     with db.tx() as c:
