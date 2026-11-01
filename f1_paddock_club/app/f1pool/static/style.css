@@ -273,3 +273,9 @@ section + section{margin-top:28px}
 .livegrid .grid th,.livegrid .grid td{padding:8px 6px}
 .livegrid .grid-wrap{scrollbar-width:none}
 .livegrid .grid-wrap::-webkit-scrollbar{display:none}
+
+/* track status next to the Live badge */
+.badges{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.badge.flag{color:#141821;box-shadow:none;font-weight:700}
+.badge.flag.yellow,.badge.flag.sc,.badge.flag.vsc{background:var(--amber)}
+.badge.flag.red{background:var(--red);color:#fff}

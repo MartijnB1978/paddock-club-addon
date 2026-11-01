@@ -235,6 +235,54 @@ def clock(data):
     return {"remaining": int(h * 3600 + m * 60 + sec), "utc": c.get("Utc"), "running": bool(c.get("Extrapolating"))}
 
 
+TRACK_FLAGS = {"2": ("yellow", "Yellow flag"), "4": ("sc", "Safety car"), "5": ("red", "Red flag"),
+               "6": ("vsc", "VSC"), "7": ("vsc", "VSC ending")}
+
+
+def track_flag(data):
+    """{'kind', 'label', 'restart_utc'} for a yellow / SC / VSC / red flag, None when the track is clear."""
+    st = str((data.get("TrackStatus") or {}).get("Status") or "")
+    if st not in TRACK_FLAGS:
+        return None
+    kind, label = TRACK_FLAGS[st]
+    return {"kind": kind, "label": label, "restart_utc": restart_utc(data) if st == "5" else None}
+
+
+def restart_utc(data):
+    """Restart time announced by Race Control after the latest red flag (ISO UTC), or None.
+    Race Control gives it in track-local time ('RESUMPTION AT 15:45'); converted with the session's GMT offset."""
+    import re
+    from datetime import datetime, timedelta, timezone
+    msgs = (data.get("RaceControlMessages") or {}).get("Messages") or {}
+    items = [v for _k, v in sorted(msgs.items(), key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else -1)] \
+        if isinstance(msgs, dict) else list(msgs)
+    off = str((data.get("SessionInfo") or {}).get("GmtOffset") or "00:00:00")
+    try:
+        sign = -1 if off.startswith("-") else 1
+        h, m = off.lstrip("+-").split(":")[:2]
+        offset = timedelta(hours=int(h), minutes=int(m)) * sign
+    except ValueError:
+        offset = timedelta(0)
+    for msg in reversed(items):
+        if not isinstance(msg, dict):
+            continue
+        text = str(msg.get("Message") or "").upper()
+        if "RED FLAG" in text or msg.get("Flag") == "RED":
+            return None                          # nothing announced since this red flag
+        hit = re.search(r"\b(\d{1,2})[:.](\d{2})\b", text)
+        if hit and ("RESUM" in text or "RESTART" in text or "RE-START" in text):
+            try:
+                sent = datetime.fromisoformat(str(msg.get("Utc"))[:19]).replace(tzinfo=timezone.utc)
+            except ValueError:
+                sent = datetime.now(timezone.utc)
+            local = (sent + offset).replace(hour=int(hit.group(1)), minute=int(hit.group(2)), second=0)
+            utc = local - offset
+            if utc < sent - timedelta(hours=1):
+                utc += timedelta(days=1)
+            return utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return None
+
+
 def lap_count(data):
     """(current lap, total laps) from LapCount; (0, 0) when unknown."""
     lc = data.get("LapCount") or {}

@@ -31,6 +31,7 @@ class Engine:
         self.live_session = None         # sessions row id
         self.live_status = "idle"
         self.live_clock = None           # {'part', 'end_utc'|None, 'remaining', 'running'}
+        self.live_flag = None            # {'kind', 'label', 'restart_utc'}: yellow / SC / VSC / red
         self._flag_at = None             # when the chequered flag came out in the final part
         self._from_feed = set()          # sessions scored from the live feed while waiting for the archive
         self._dirty = False
@@ -334,6 +335,10 @@ class Engine:
             started = db.now_utc() >= db.parse_iso(s["start_utc"])
             if same_session and started:
                 self.update_clock(s, data)
+                flag = lt.track_flag(data)
+                if flag != self.live_flag:
+                    self.live_flag = flag
+                    self.bump()
             # final part over (Q3 / SQ3 / race / sprint) and the flag is out: wait for every car
             part = lt.session_part(data)
             last_part = s["kind"] not in ("Q", "SQ") or part == 3
@@ -415,6 +420,7 @@ class Engine:
         self.live_session = None
         self.live_status = "idle"
         self.live_clock = None
+        self.live_flag = None
         self._flag_at = None
 
     def apply_state(self, s, data, pits, source):

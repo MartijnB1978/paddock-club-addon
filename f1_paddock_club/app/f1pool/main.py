@@ -263,7 +263,8 @@ def live_panel():
                  s["event_id"]) if s["kind"] == "R" else []
     return {"session": s, "rows": rows, "extra": extra, "votes": votes,
             "is_live": bool(sid and sid == s["id"]), "status": engine.live_status,
-            "clock": engine.live_clock if sid and sid == s["id"] else None}
+            "clock": engine.live_clock if sid and sid == s["id"] else None,
+            "flag": engine.live_flag if sid and sid == s["id"] else None}
 
 
 def event_grid(ev, only_locked=False):

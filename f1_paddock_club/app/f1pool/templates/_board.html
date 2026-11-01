@@ -66,7 +66,7 @@
         {% elif ck %}<p class="clock">{% if ck.part %}<b>{{ ck.part }}</b> · {% endif %}<span
           {% if ck.end_utc %}data-remaining-until="{{ ck.end_utc }}"{% endif %}>{{ ck|clockleft }}</span> remaining{% if not ck.running and ck.remaining > 0 %} (paused){% endif %}</p>{% endif %}
       </div>
-      {% if panel.is_live %}<span class="badge live-dot">Live</span>
+      {% if panel.is_live %}<div class="badges">{% if panel.flag %}<span class="badge flag {{ panel.flag.kind }}">{{ panel.flag.label }}{% if panel.flag.restart_utc %} · restart {{ panel.flag.restart_utc|localtime('%H:%M') }}{% endif %}</span>{% endif %}<span class="badge live-dot">Live</span></div>
       {% elif s.status == 'final' %}<span class="badge">Official</span>
       {% else %}<span class="badge">Provisional</span>{% endif %}
     </header>
