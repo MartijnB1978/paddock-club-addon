@@ -15,9 +15,16 @@
   </tbody>
 </table>
 <p style="font-size:6.5pt;color:#5b6475;margin-top:6px">Purple: best score of the weekend. Ties are decided by the number of weekend wins.</p>
+{% if bump_race_svg %}
+<section style="page-break-before:always;page-break-inside:avoid">
+  <h2 style="font:700 12pt BC;margin:0 0 1px">Players lap by lap (Race): {{ event.name }}</h2>
+  <p style="font-size:7pt;color:#5b6475;margin:0 0 6px">Position on this race's predictions only (race top 10, fastest lap, Driver of the Day, fastest pit stop), lap by lap to the final result. Everyone starts at 0; ties keep the season order. Numbers: points scored this race.</p>
+  {{ bump_race_svg|safe }}
+</section>
+{% endif %}
 {% if bump_svg %}
 <section style="page-break-before:always;page-break-inside:avoid">
-  <h2 style="font:700 12pt BC;margin:0 0 1px">Players lap by lap: {{ event.name }}</h2>
+  <h2 style="font:700 12pt BC;margin:0 0 1px">Players lap by lap (Season): {{ event.name }}</h2>
   <p style="font-size:7pt;color:#5b6475;margin:0 0 6px">Paddock Club position from the start of the race, lap by lap, to the final standings after the race (Driver of the Day and fastest pit stop included). Arrows: places gained or lost since the start.</p>
   {{ bump_svg|safe }}
 </section>

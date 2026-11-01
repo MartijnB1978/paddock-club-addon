@@ -126,10 +126,10 @@ def _esc(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def report_svg(event_id):
+def report_svg(event_id, mode="season"):
     """Finished race only: the bump chart as a self-contained SVG for the PDF report (A4 landscape width)."""
     ev = db.q1("SELECT year FROM events WHERE id=?", event_id)
-    c = chart(ev["year"], event_id=event_id) if ev else None
+    c = chart(ev["year"], event_id=event_id, mode=mode) if ev else None
     if not c or not c["finished"]:
         return None
     row = max(10, min(34, 520 // c["n"]))         # fill the page, whatever the number of players
@@ -162,7 +162,8 @@ def report_svg(event_id):
         out.append(f'<circle cx="{left + pw + 9}" cy="{y:.1f}" r="3.6" fill="{p["print"]}"/>'
                    f'<text x="{left + pw + 17}" y="{y + 3.3:.1f}" font-size="10" fill="#141821" font-weight="600">'
                    f'{_esc(p["name"])}{mv}</text>'
-                   f'<text x="{W - 2}" y="{y + 3.3:.1f}" font-size="10" fill="#5b6475" text-anchor="end">{p["total"]}</text>')
+                   f'<text x="{W - 2}" y="{y + 3.3:.1f}" font-size="10" fill="#5b6475" text-anchor="end">'
+                   f'{"+" if mode == "race" and p["total"] > 0 else ""}{p["total"]}</text>')
     out.append("</svg>")
     return "".join(out)
 
