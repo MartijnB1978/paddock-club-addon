@@ -27,11 +27,12 @@
     {% else %}
       <p class="muted pad">Waiting for timing data.</p>
     {% endif %}
-    {% if panel.extra %}
+    {% if panel.extra or s.kind == 'R' %}
+    {% macro pending() %}<dd class="muted">Pending</dd>{% endmacro %}
     <dl class="extras">
-      {% if panel.extra.fl %}<div><dt>Fastest lap</dt><dd>{{ driver(panel.extra.fl, drivers, teams) }}</dd></div>{% endif %}
-      {% if panel.extra.fp %}<div><dt>Fastest pit stop</dt><dd>{{ team(panel.extra.fp, teams) }}</dd></div>{% endif %}
-      {% if panel.extra.dotd %}<div><dt>Driver of the Day</dt><dd>{{ driver(panel.extra.dotd, drivers, teams) }}</dd></div>{% endif %}
+      <div><dt>Fastest lap</dt>{% if panel.extra.fl %}<dd>{{ driver(panel.extra.fl, drivers, teams) }}</dd>{% else %}{{ pending() }}{% endif %}</div>
+      <div><dt>Fastest pit stop</dt>{% if panel.extra.fp %}<dd>{{ team(panel.extra.fp, teams) }}</dd>{% else %}{{ pending() }}{% endif %}</div>
+      <div><dt>Driver of the Day</dt>{% if panel.extra.dotd %}<dd>{{ driver(panel.extra.dotd, drivers, teams) }}</dd>{% else %}{{ pending() }}{% endif %}</div>
     </dl>
     {% endif %}
     {% if panel.votes %}
