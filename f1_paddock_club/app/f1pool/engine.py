@@ -63,7 +63,29 @@ class Engine:
         self.wake.set()
 
     def start(self):
+        self.repair_partial_archive()
         threading.Thread(target=self._run, daemon=True, name="engine").start()
+
+    def repair_partial_archive(self):
+        """One-time repair (v1.3.2): sessions of the last day marked official from an incomplete archive
+        are re-checked; their archive-derived results are removed so the live feed / complete archive
+        fill them in again."""
+        if db.setting("repair_partial_archive_v132"):
+            return
+        since = db.iso(db.now_utc() - timedelta(days=1))
+        for s in db.q("SELECT s.*, e.name AS ev_name, e.year FROM sessions s JOIN events e ON e.id=s.event_id "
+                      "WHERE s.status='final' AND s.kind IN ('SQ','S','Q','R') AND s.start_utc>=?", since):
+            with db.tx() as c:
+                c.execute("DELETE FROM results WHERE event_id=? AND source='final'", (s["event_id"],))
+                c.execute("UPDATE sessions SET status='finished', last_fetch=NULL WHERE id=?", (s["id"],))
+                if s["kind"] == "R" and s["ev_name"] == "Mexico City Grand Prix" and s["year"] == 2026:
+                    # verified classification (RaceFans, The Race); the live feed / archive confirm it
+                    for slot, tla in enumerate(["VER", "HAM", "ANT", "LEC", "NOR", "RUS", "PIA", "COL",
+                                                "LAW", "GAS", "BOR", "HAD"], start=1):
+                        c.execute("INSERT OR REPLACE INTO results VALUES(?,?,?,?,?,?)",
+                                  (s["event_id"], "race_pos", slot, tla, "live", db.iso(db.now_utc())))
+            db.logmsg("info", f"Re-checking {s['ev_name']} {s['name']}: results came from an incomplete archive")
+        db.set_setting("repair_partial_archive_v132", "1")
 
     def _run(self):
         time.sleep(2)
@@ -619,6 +641,13 @@ class Engine:
                 continue
             st = self.http.session_state(s["path"])
             db.ex("UPDATE sessions SET last_fetch=? WHERE id=?", db.iso(now), s["id"])
+            # during and shortly after a session F1's archive is a partial copy (it froze around lap 3 in
+            # Mexico 2026): only a file that reaches the end of the session counts as the official result
+            if st and lt.classification(st.data) and not lt.is_finished(st.data):
+                if self.due(f"partial{s['id']}", 1800):
+                    db.logmsg("info", f"Archive for {s['name']} is still incomplete (status "
+                                      f"{lt.session_status(st.data)}); waiting for the final version")
+                st = None
             ev_name = db.q1("SELECT name FROM events WHERE id=?", s["event_id"])["name"]
             if not (st and lt.classification(st.data)) and now - ended < timedelta(hours=3) \
                     and s["id"] not in self._from_feed and self.due(f"feedgrab{s['id']}", 600):
