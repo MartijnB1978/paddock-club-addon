@@ -469,8 +469,10 @@ def chat_page(request: Request):
     rows = chat.messages()
     if rows:
         chat.mark_seen(user["id"], rows[-1]["id"])
-    return render(request, "chat.html", rows=rows, chat_unread=0, now=db.iso(db.now_utc()),
+    resp = render(request, "chat.html", rows=rows, chat_unread=0, now=db.iso(db.now_utc()),
                   edit_until=chat.edit_until)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.get("/chat/messages")
@@ -480,7 +482,8 @@ def chat_messages(request: Request, after: int = 0, before: int = 0, since: str 
     rows = chat.messages(before=before, limit=40) if before else chat.messages(after=after)
     if rows and not before:
         chat.mark_seen(user["id"], rows[-1]["id"])
-    out = {"messages": _chat_json(rows, user), "more": bool(before) and len(rows) == 40, "now": now}
+    out = {"messages": _chat_json(rows, user), "more": bool(before) and len(rows) == 40, "now": now,
+           "visible": db.q1("SELECT COUNT(*) n FROM chat_messages WHERE deleted=0")["n"]}
     if since and not before:
         out["changed"] = _chat_json(chat.changed(since, after), user)
     return JSONResponse(out)

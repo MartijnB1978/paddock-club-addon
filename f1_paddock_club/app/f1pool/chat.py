@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS chat_seen(user_id INTEGER PRIMARY KEY, last_id INTEGE
 
 def init():
     db.conn().executescript(SCHEMA)
+    r = db.q1("SELECT COUNT(*) n, SUM(deleted) d, MAX(id) mx FROM chat_messages")
+    db.logmsg("info", f"Chat: {r['n']} messages stored ({r['d'] or 0} deleted, last #{r['mx'] or 0}); "
+                      f"database {db.DB_PATH}")
     cols = {r["name"] for r in db.q("PRAGMA table_info(chat_messages)")}
     if "edited_at" not in cols:
         db.ex("ALTER TABLE chat_messages ADD COLUMN edited_at TEXT")
@@ -164,6 +167,8 @@ def post(user_id, text, media_id=None):
         raise ChatError("Slow down a little.")
     cur = db.ex("INSERT INTO chat_messages(user_id,text,media_id,created_at) VALUES(?,?,?,?)",
                 user_id, text, media_id, db.iso(db.now_utc()))
+    n = db.q1("SELECT COUNT(*) n FROM chat_messages WHERE deleted=0")["n"]
+    db.logmsg("info", f"Chat: message #{cur.lastrowid} by user {user_id} stored ({n} visible messages)")
     return cur.lastrowid
 
 
@@ -209,6 +214,7 @@ def delete(msg_id, user):
     if not m or (m["user_id"] != user["id"] and not user["is_admin"]):
         return False
     db.ex("UPDATE chat_messages SET deleted=1, text='', edited_at=? WHERE id=?", db.iso(db.now_utc()), msg_id)
+    db.logmsg("info", f"Chat: message #{msg_id} deleted by user {user['id']}")
     if m["media_id"]:
         x = db.q1("SELECT path FROM chat_media WHERE id=?", m["media_id"])
         if x and Path(x["path"]).is_file():
