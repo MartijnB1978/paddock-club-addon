@@ -19,9 +19,11 @@ NEGOTIATE_URL = "https://livetiming.formula1.com/signalrcore/negotiate"
 TOPICS = ["Heartbeat", "DriverList", "SessionInfo", "SessionStatus", "SessionData",
           "TimingData", "TimingStats", "TimingAppData", "LapCount", "TrackStatus",
           "ExtrapolatedClock", "TopThree", "ChampionshipPrediction",
-          "PitStopSeries", "PitStop", "PitLaneTimeCollection", "RaceControlMessages", "LapSeries", "WeatherData"]
+          "PitStopSeries", "PitStop", "PitLaneTimeCollection", "RaceControlMessages", "LapSeries", "WeatherData", "Position.z"]
 # topics delivered as events (each message replaces the previous one)
 EVENT_TOPICS = {"PitStop"}
+# topics where only the latest message matters (stored as-is, not merged)
+REPLACE_TOPICS = {"Position.z": "Position"}
 STATIC_TOPICS = ["DriverList", "SessionInfo", "SessionStatus", "TimingData", "TimingStats",
                  "ChampionshipPrediction", "PitStopSeries", "PitStop"]
 
@@ -69,7 +71,9 @@ class TimingState:
         if not isinstance(payload, dict):
             return
         with self.lock:
-            if topic in EVENT_TOPICS:
+            if topic in REPLACE_TOPICS:
+                self.data[REPLACE_TOPICS[topic]] = payload
+            elif topic in EVENT_TOPICS:
                 self._pit_event(payload)
                 self.data[topic] = payload
             else:
@@ -237,6 +241,83 @@ def clock(data):
 
 TRACK_FLAGS = {"2": ("yellow", "Yellow flag"), "4": ("sc", "Safety car"), "5": ("red", "Red flag"),
                "6": ("vsc", "VSC"), "7": ("vsc", "VSC ending")}
+
+
+def rc_messages(data, limit=6):
+    """Latest Race Control messages, newest first; blue flags (constant during a race) left out."""
+    msgs = (data.get("RaceControlMessages") or {}).get("Messages") or {}
+    items = [v for _k, v in sorted(msgs.items(), key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else -1)] \
+        if isinstance(msgs, dict) else list(msgs)
+    out = []
+    for m in reversed(items):
+        if not isinstance(m, dict) or not m.get("Message") or m.get("Flag") == "BLUE":
+            continue
+        flag = (m.get("Flag") or "").upper()
+        cat = m.get("Category") or ""
+        text = m["Message"]
+        kind = {"YELLOW": "yellow", "DOUBLE YELLOW": "yellow", "RED": "red", "GREEN": "green",
+                "CLEAR": "green", "CHEQUERED": "chequered"}.get(flag, "")
+        if not kind:
+            up = text.upper()
+            if "PENALTY" in up or "INVESTIGATION" in up or "NOTED" in up or "DELETED" in up:
+                kind = "steward"
+            elif cat == "SafetyCar" or "SAFETY CAR" in up:
+                kind = "yellow"
+            elif cat == "Drs":
+                kind = "drs"
+        out.append({"utc": str(m.get("Utc") or "")[:19] + "Z", "text": text, "kind": kind})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def tyres(data):
+    """{racing number: {'compound', 'letter', 'age', 'stops', 'new'}} from the current stint in TimingAppData."""
+    out = {}
+    for num, ln in (((data.get("TimingAppData") or {}).get("Lines")) or {}).items():
+        stints = ln.get("Stints") if isinstance(ln, dict) else None
+        if isinstance(stints, list):
+            stints = {str(i): s for i, s in enumerate(stints)}
+        if not isinstance(stints, dict):
+            continue
+        keys = sorted((k for k in stints if str(k).isdigit() and isinstance(stints[k], dict)), key=int)
+        if not keys:
+            continue
+        cur = stints[keys[-1]]
+        comp = str(cur.get("Compound") or "").upper()
+        if not comp or comp == "UNKNOWN":
+            continue
+        try:
+            age = int(cur.get("TotalLaps") or 0)
+        except (TypeError, ValueError):
+            age = 0
+        out[str(num)] = {"compound": comp.title(), "letter": comp[:1] if comp not in ("INTERMEDIATE",) else "I",
+                         "age": age, "stops": len(keys) - 1, "new": str(cur.get("New")).lower() == "true"}
+    return out
+
+
+def car_positions(data):
+    """{racing number: (x, y)} from the latest Position sample; cars in the pit lane or stopped are left out."""
+    pos = data.get("Position") or {}
+    seq = pos.get("Position") if isinstance(pos, dict) else None
+    if isinstance(seq, dict):
+        seq = [seq[k] for k in sorted(seq, key=lambda k: int(k) if str(k).isdigit() else 0)]
+    if not seq:
+        return {}
+    last = seq[-1] if isinstance(seq[-1], dict) else {}
+    out = {}
+    for num, e in (last.get("Entries") or {}).items():
+        if isinstance(e, dict) and e.get("X") is not None and e.get("Status", "OnTrack") == "OnTrack":
+            try:
+                out[str(num)] = (float(e["X"]), float(e["Y"]))
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
+def circuit_key(data):
+    meeting = (data.get("SessionInfo") or {}).get("Meeting") or {}
+    return (meeting.get("Circuit") or {}).get("Key")
 
 
 def track_flag(data):

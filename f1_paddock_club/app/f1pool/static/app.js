@@ -117,6 +117,74 @@
     };
   }
 
+  // live track map: one persistent element, moved into the slot after every board refresh
+  var map = null, mapKey = "", mapTimer = null, unit = 120, NS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs) {
+    var el = document.createElementNS(NS, tag);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+  function mountMap() {
+    var slot = document.getElementById("trackmap-slot");
+    if (!slot) {
+      if (mapTimer) { clearInterval(mapTimer); mapTimer = null; }
+      return;
+    }
+    if (!map) {
+      map = document.createElement("div");
+      map.className = "trackmap";
+      map.innerHTML = '<svg role="img" aria-label="Live track map with every car\'s position"><g class="trk"></g><g class="cars"></g></svg><p class="note" hidden>The track outline fills in as the cars drive.</p>';
+    }
+    slot.replaceWith(map);
+    if (!mapTimer) { pollMap(); mapTimer = setInterval(pollMap, 1500); }
+  }
+  function pollMap() {
+    if (document.hidden || !map) return;
+    fetch("/live/map?have=" + encodeURIComponent(mapKey), {cache: "no-store"})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.live) return;
+        var svg = map.querySelector("svg");
+        if (d.track) {
+          mapKey = d.key;
+          svg.setAttribute("viewBox", d.track.viewBox);
+          unit = Math.max(60, Number(d.track.viewBox.split(" ")[2]) / 85);
+          var g = svg.querySelector(".trk");
+          while (g.firstChild) g.removeChild(g.firstChild);
+          if (d.track.path) {
+            g.appendChild(svgEl("path", {d: d.track.path, "class": "road", "stroke-width": unit * 2.4}));
+            g.appendChild(svgEl("path", {d: d.track.path, "class": "edge", "stroke-width": unit * 0.3}));
+          } else {
+            d.track.dots.forEach(function (p) { g.appendChild(svgEl("circle", {cx: p[0], cy: p[1], r: unit * 0.35, "class": "dot"})); });
+          }
+          map.querySelector(".note").hidden = !!d.track.path;
+        }
+        var cg = svg.querySelector(".cars"), seen = {};
+        d.cars.forEach(function (c) {
+          var el = cg.querySelector('[data-t="' + c.tla + '"]');
+          var fresh = !el;
+          if (fresh) {
+            el = svgEl("g", {"class": "car"});
+            el.setAttribute("data-t", c.tla);
+            el.appendChild(svgEl("circle", {r: unit, "stroke-width": unit * 0.25}));
+            var t = svgEl("text", {x: unit * 1.35, y: unit * 0.55, "font-size": unit * 1.7, "stroke-width": unit * 0.35});
+            t.textContent = c.tla;
+            el.appendChild(t);
+            el.style.transition = "none";
+          }
+          el.querySelector("circle").setAttribute("fill", c.c);
+          el.style.transform = "translate(" + c.x + "px," + c.y + "px)";
+          cg.appendChild(el);                       // server order: leader last, drawn on top
+          if (fresh) { el.getBoundingClientRect(); el.style.transition = ""; }
+          seen[c.tla] = 1;
+        });
+        Array.prototype.slice.call(cg.children).forEach(function (el) {
+          if (!seen[el.getAttribute("data-t")]) cg.removeChild(el);
+        });
+      }).catch(function () {});
+  }
+  mountMap();
+
   // live standings: server-sent events -> refresh board with FLIP animation
   var board = document.getElementById("board");
   if (!board || !window.EventSource) return;
@@ -131,7 +199,7 @@
     var before = positions();
     fetch("/fragment/board?year=" + year, {cache: "no-store"}).then(function (r) { return r.text(); })
       .then(function (html) {
-        board.innerHTML = html; if (window.pcClockTick) window.pcClockTick();
+        board.innerHTML = html; if (window.pcClockTick) window.pcClockTick(); mountMap();
         var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         board.querySelectorAll(".row").forEach(function (r) {
           var old = before[r.dataset.id];

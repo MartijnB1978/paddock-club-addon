@@ -15,8 +15,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, bump, db, dotd, weather, importer, mailer, reports, scoring, standings
+from . import auth, bump, db, dotd, track, weather, importer, mailer, reports, scoring, standings
 from .engine import Engine
+from .livetiming import car_positions as lt_positions
 from .schedule import DURATION, SCORED
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -266,6 +267,8 @@ def live_panel():
             "is_live": bool(sid and sid == s["id"]), "status": engine.live_status,
             "clock": engine.live_clock if sid and sid == s["id"] else None,
             "flag": engine.live_flag if sid and sid == s["id"] else None,
+            "rc": engine.live_rc if sid and sid == s["id"] else [],
+            "tyres": engine.live_tyres if sid and sid == s["id"] else {},
             "wx": weather.get(s["event_id"], {"WeatherData": engine.live_weather} if sid and sid == s["id"] else None)}
 
 
@@ -367,6 +370,46 @@ def board_fragment(request: Request, year: int | None = None):
         "user": current_user(request), "lg": live_grid() if current_user(request) else None,
         "nxt": (upcoming_deadlines(1) or [None])[0],
         "drivers": driver_map(year), "teams": team_map(year), "events": events})
+
+
+_map_frame = {"key": None, "frame": None, "draw": None}
+
+
+@app.get("/live/map")
+def live_map(have: str = ""):
+    """Track map data for the browser: the outline (only when it changed) and every car's position now."""
+    live = engine.live
+    if not live or not engine.live_circuit:
+        return JSONResponse({"live": False})
+    key, year = engine.live_circuit
+    trace = sorted(engine.live_trace)
+    want = f"{key}:{year}" if db.setting(f"track:{key}:{year}") and \
+        (json.loads(db.setting(f"track:{key}:{year}")) or {}).get("x") else f"trace:{len(trace) // 200}"
+    if _map_frame["key"] != want or _map_frame["frame"] is None:
+        frame, draw = track.build(key, year, trace)
+        _map_frame.update(key=draw["key"], frame=frame, draw=draw)
+    frame, draw = _map_frame["frame"], _map_frame["draw"]
+    with live.state.lock:
+        pos = lt_positions({"Position": live.state.data.get("Position")})
+    s = db.q1("SELECT e.year, e.id FROM sessions s JOIN events e ON e.id=s.event_id WHERE s.id=?",
+              engine.live_session)
+    num2 = {str(e["number"]): e for e in db.q("SELECT * FROM entrants WHERE event_id=?", s["id"])} if s else {}
+    order = {r["value"]: r["slot"] for r in db.q(
+        "SELECT slot, value FROM results WHERE event_id=? AND field IN ('race_pos','sprint_pos') "
+        "AND slot<=22 ORDER BY slot", s["id"])} if s else {}
+    cars = []
+    for num, (x, y) in pos.items():
+        e = num2.get(num)
+        if not e:
+            continue
+        tx, ty = frame.tf(x, y)
+        cars.append({"tla": e["tla"], "c": "#" + (e["colour"] or "8d97aa"), "x": round(tx), "y": round(ty),
+                     "p": order.get(e["tla"], 99)})
+    cars.sort(key=lambda c: -c["p"])          # leader drawn last, on top
+    out = {"live": True, "key": draw["key"], "cars": cars}
+    if have != draw["key"]:
+        out["track"] = {"viewBox": draw["viewBox"], "path": draw["path"], "dots": draw["dots"]}
+    return JSONResponse(out)
 
 
 @app.get("/stream")

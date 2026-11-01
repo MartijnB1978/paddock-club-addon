@@ -281,3 +281,27 @@ section + section{margin-top:28px}
 .badge.flag.red{background:var(--red);color:#fff}
 
 .wx{margin-left:8px;white-space:nowrap;color:var(--text)}
+
+/* Race Control ticker */
+.rc{list-style:none;margin:0;padding:0;font-size:.8rem;letter-spacing:.01em}
+.rc li{display:flex;gap:10px;padding:5px 0 5px 8px;border-left:3px solid var(--line);margin-bottom:3px}
+.rc time{color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.rc li.yellow{border-color:var(--amber)} .rc li.red{border-color:var(--red)} .rc li.green{border-color:var(--green)}
+.rc li.steward{border-color:var(--purple)} .rc li.drs{border-color:#4da3ff} .rc li.chequered{border-color:#fff}
+/* live track map */
+.trackmap{margin-top:14px}
+.trackmap svg{display:block;width:100%;height:auto;max-height:360px}
+.trackmap .road{fill:none;stroke:#2c3445;stroke-linejoin:round;stroke-linecap:round}
+.trackmap .edge{fill:none;stroke:#4a5568;stroke-linejoin:round}
+.trackmap .dot{fill:#3b4558}
+.trackmap g.car{transition:transform 1.6s linear}
+.trackmap g.car circle{stroke:#141821}
+.trackmap g.car text{font-family:var(--display);font-weight:700;fill:var(--text);paint-order:stroke;stroke:#141821}
+.trackmap .note{font-size:.75rem;color:var(--muted);margin:4px 0 0}
+@media (prefers-reduced-motion:reduce){.trackmap g.car{transition:none}}
+/* tyres in the live order */
+.tyre{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.tc{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;border:3px solid;font:700 .62rem/1 var(--body);font-style:normal;color:var(--text);background:#141821}
+.tc.soft{border-color:#ff3333} .tc.medium{border-color:#ffd12e} .tc.hard{border-color:#f0f0ec}
+.tc.intermediate{border-color:#43b02a} .tc.wet{border-color:#2f8cff}
+.tyre .ts{color:var(--muted);font-size:.7rem}

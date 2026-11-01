@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from . import bump, db, dotd, livetiming as lt, scoring, mailer, weather
+from . import bump, db, dotd, livetiming as lt, scoring, mailer, track, weather
 from .f1auth import TokenManager
 from .schedule import DURATION, SCORED, sync as sync_schedule
 
@@ -33,6 +33,10 @@ class Engine:
         self.live_clock = None           # {'part', 'end_utc'|None, 'remaining', 'running'}
         self.live_flag = None            # {'kind', 'label', 'restart_utc'}: yellow / SC / VSC / red
         self.live_weather = None         # WeatherData from the live feed (rain sensor)
+        self.live_rc = []                # latest Race Control messages
+        self.live_tyres = {}             # tla -> current tyre
+        self.live_circuit = None         # (circuit key, year) for the track map
+        self.live_trace = set()          # where cars have been (track map fallback outline)
         self._flag_at = None             # when the chequered flag came out in the final part
         self._from_feed = set()          # sessions scored from the live feed while waiting for the archive
         self._dirty = False
@@ -355,6 +359,10 @@ class Engine:
                 if flag != self.live_flag:
                     self.live_flag = flag
                     self.bump()
+                try:
+                    self.update_live_extras(s, data)
+                except Exception as exc:  # noqa: BLE001  extras must never break live results
+                    db.logmsg("warning", f"Live extras failed: {exc}")
             # final part over (Q3 / SQ3 / race / sprint) and the flag is out: wait for every car
             part = lt.session_part(data)
             last_part = s["kind"] not in ("Q", "SQ") or part == 3
@@ -428,6 +436,22 @@ class Engine:
             self.live_clock = new
             self.bump()
 
+    def update_live_extras(self, s, data):
+        """Race Control ticker, tyres and the data behind the track map."""
+        self.live_rc = lt.rc_messages(data)
+        num2tla = {k: v["tla"] for k, v in lt.driver_info(data).items()}
+        for e in db.q("SELECT number, tla FROM entrants WHERE event_id=?", s["event_id"]):
+            num2tla.setdefault(str(e["number"]), e["tla"])
+        self.live_tyres = {num2tla[n]: t for n, t in lt.tyres(data).items() if n in num2tla}
+        year = db.q1("SELECT year FROM events WHERE id=?", s["event_id"])["year"]
+        circuit = (lt.circuit_key(data), year)
+        if circuit != self.live_circuit and circuit[0]:
+            threading.Thread(target=track.outline, args=circuit, daemon=True).start()   # warm the cache
+        self.live_circuit = circuit
+        if len(self.live_trace) < 6000:
+            for x, y in lt.car_positions(data).values():
+                self.live_trace.add((round(x / 60) * 60, round(y / 60) * 60))
+
     def stop_live(self, why):
         if self.live:
             self.live.stop()
@@ -437,6 +461,7 @@ class Engine:
         self.live_status = "idle"
         self.live_clock = None
         self.live_flag = None
+        self.live_rc, self.live_tyres, self.live_circuit, self.live_trace = [], {}, None, set()
         self._flag_at = None
 
     def apply_state(self, s, data, pits, source):

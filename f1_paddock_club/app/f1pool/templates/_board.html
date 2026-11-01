@@ -74,7 +74,8 @@
     {% if panel.rows %}
     <ol class="order">
       {% for r in panel.rows[:10] %}
-      <li><span class="p">{{ r.slot }}</span>{{ driver(r.value, drivers, teams, true) }}</li>
+      {% set ty = panel.tyres.get(r.value) if panel.tyres else none %}
+      <li><span class="p">{{ r.slot }}</span>{{ driver(r.value, drivers, teams, true) }}{% if ty %}<span class="tyre" title="{{ ty.compound }}{{ ' (new)' if ty.new }}, {{ ty.age }} {{ 'lap' if ty.age == 1 else 'laps' }} old, {{ ty.stops }} {{ 'stop' if ty.stops == 1 else 'stops' }}"><i class="tc {{ ty.compound|lower }}">{{ ty.letter }}</i><span class="ta">{{ ty.age }}</span>{% if ty.stops %}<span class="ts">{{ ty.stops }}×</span>{% endif %}</span>{% endif %}</li>
       {% endfor %}
     </ol>
     {% else %}
@@ -87,6 +88,13 @@
       {% if panel.extra.dotd %}<div><dt>Driver of the Day</dt><dd>{{ driver(panel.extra.dotd, drivers, teams) }}</dd></div>{% endif %}
     </dl>
     {% endif %}
+    {% if panel.rc %}
+    <h3 class="vh">Race Control</h3>
+    <ol class="rc" aria-label="Latest Race Control messages">
+      {% for m in panel.rc %}<li class="{{ m.kind }}"><time>{{ m.utc|localtime('%H:%M') }}</time><span>{{ m.text }}</span></li>{% endfor %}
+    </ol>
+    {% endif %}
+    {% if panel.is_live %}<div id="trackmap-slot"></div>{% endif %}
     {% if panel.votes %}
     <h3 class="vh">Driver of the Day vote</h3>
     <ol class="votes" aria-label="Driver of the Day fan vote">
