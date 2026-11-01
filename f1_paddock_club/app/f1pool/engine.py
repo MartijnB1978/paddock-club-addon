@@ -64,7 +64,25 @@ class Engine:
 
     def start(self):
         self.repair_partial_archive()
+        self.fix_mexico_2026()
         threading.Thread(target=self._run, daemon=True, name="engine").start()
+
+    def fix_mexico_2026(self):
+        """F1's timing data (live feed and archive alike) still classifies Mexico 2026 in a wrong order;
+        the verified result (RaceFans, The Race, PlanetF1) is entered as an admin correction, which no
+        feed or archive update overwrites."""
+        if db.setting("fix_mexico_2026_v133"):
+            return
+        ev = db.q1("SELECT id FROM events WHERE year=2026 AND name='Mexico City Grand Prix'")
+        if ev:
+            with db.tx() as c:
+                c.execute("DELETE FROM results WHERE event_id=? AND field='race_pos'", (ev["id"],))
+                for slot, tla in enumerate(["VER", "HAM", "ANT", "LEC", "NOR", "RUS", "PIA", "COL",
+                                            "LAW", "GAS", "BOR", "HAD"], start=1):
+                    c.execute("INSERT INTO results VALUES(?,?,?,?,?,?)",
+                              (ev["id"], "race_pos", slot, tla, "admin", db.iso(db.now_utc())))
+            db.logmsg("info", "Mexico City Grand Prix 2026: race result corrected (admin): VER, HAM, ANT, LEC, NOR")
+        db.set_setting("fix_mexico_2026_v133", "1")
 
     def repair_partial_archive(self):
         """One-time repair (v1.3.2): sessions of the last day marked official from an incomplete archive
