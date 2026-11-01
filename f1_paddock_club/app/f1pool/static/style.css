@@ -279,3 +279,5 @@ section + section{margin-top:28px}
 .badge.flag{color:#141821;box-shadow:none;font-weight:700}
 .badge.flag.yellow,.badge.flag.sc,.badge.flag.vsc{background:var(--amber)}
 .badge.flag.red{background:var(--red);color:#fff}
+
+.wx{margin-left:8px;white-space:nowrap;color:var(--text)}

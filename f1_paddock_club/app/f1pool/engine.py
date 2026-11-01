@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from . import bump, db, dotd, livetiming as lt, scoring, mailer
+from . import bump, db, dotd, livetiming as lt, scoring, mailer, weather
 from .f1auth import TokenManager
 from .schedule import DURATION, SCORED, sync as sync_schedule
 
@@ -32,6 +32,7 @@ class Engine:
         self.live_status = "idle"
         self.live_clock = None           # {'part', 'end_utc'|None, 'remaining', 'running'}
         self.live_flag = None            # {'kind', 'label', 'restart_utc'}: yellow / SC / VSC / red
+        self.live_weather = None         # WeatherData from the live feed (rain sensor)
         self._flag_at = None             # when the chequered flag came out in the final part
         self._from_feed = set()          # sessions scored from the live feed while waiting for the archive
         self._dirty = False
@@ -88,6 +89,12 @@ class Engine:
         self.handle_live(now)
         if self.due("finalise", 60):
             self.finalise(now)
+        if self.due("weather", 600):
+            ids = [r["event_id"] for r in db.q(
+                "SELECT DISTINCT event_id FROM sessions WHERE start_utc BETWEEN ? AND ?",
+                db.iso(now - timedelta(days=1)), db.iso(now + timedelta(days=8)))]
+            weather.refresh(ids)
+            self.bump()
         if self.due("bump_catchup", 120):
             self.bump_catchup(now)
         if self.due("standings", 6 * 3600):
@@ -337,6 +344,7 @@ class Engine:
                 self.update_clock(s, data)
                 try:
                     flag = lt.track_flag(data)
+                    self.live_weather = data.get("WeatherData")
                 except Exception as exc:  # noqa: BLE001
                     flag = None
                     db.logmsg("warning", f"Track status failed: {exc}")

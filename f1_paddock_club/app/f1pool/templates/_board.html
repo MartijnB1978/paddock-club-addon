@@ -30,6 +30,7 @@
   </div>
 </section>
 {% endmacro %}
+{% macro wxbadge(w) %}{% if w %} <span class="wx" title="Weather at the circuit now: {{ w.label }}"><span aria-hidden="true">{{ w.icon }}</span>{% if w.temp is not none %} {{ w.temp }}°C{% endif %}<span class="sr">{{ w.label }}</span></span>{% endif %}{% endmacro %}
 <div id="board-inner">
 <section class="tower" aria-label="Players standings">
   <div class="tower-head">
@@ -60,7 +61,7 @@
     <header class="panel-head">
       <div>
         <h2>{{ s.ev_name }}</h2>
-        <p class="muted">{{ s.name }}, {{ s.start_utc|localtime }}</p>
+        <p class="muted">{{ s.name }}, {{ s.start_utc|localtime }}{{ wxbadge(panel.wx) }}</p>
         {% set ck = panel.clock %}
         {% if ck and ck.total is defined %}<p class="clock">{% if ck.lap %}Lap <b>{{ ck.lap }}</b>{% if ck.total %} of {{ ck.total }} · <b>{{ [ck.total - ck.lap, 0]|max }}</b> {{ 'lap' if ck.total - ck.lap == 1 else 'laps' }} remaining{% endif %}{% else %}{{ ck.total }} laps{% endif %}</p>
         {% elif ck %}<p class="clock">{% if ck.part %}<b>{{ ck.part }}</b> · {% endif %}<span
@@ -96,7 +97,7 @@
     {% endif %}
   {% else %}
     {% if nxt %}
-    <header class="panel-head"><div><h2>{{ nxt.ev_name }}</h2><p class="muted">{{ nxt.name }}, {{ nxt.start_utc|localtime }}</p></div>
+    <header class="panel-head"><div><h2>{{ nxt.ev_name }}</h2><p class="muted">{{ nxt.name }}, {{ nxt.start_utc|localtime }}{{ wxbadge(wx_get(nxt.event_id)) }}</p></div>
       <span class="badge">Next</span></header>
     <p class="muted pad">Live timing appears here when this session starts.</p>
     {% else %}

@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, bump, db, dotd, importer, mailer, reports, scoring, standings
+from . import auth, bump, db, dotd, weather, importer, mailer, reports, scoring, standings
 from .engine import Engine
 from .schedule import DURATION, SCORED
 
@@ -115,6 +115,7 @@ def clockleft(ck):
 
 
 templates.env.filters["clockleft"] = clockleft
+templates.env.globals["wx_get"] = lambda eid: weather.get(eid)
 templates.env.globals["LABELS"] = scoring.LABELS
 # cache-busting: changes whenever the static files change, so browsers never use a stale stylesheet
 templates.env.globals["ASSET_V"] = int(max((HERE / "static" / f).stat().st_mtime for f in ("style.css", "app.js")))
@@ -264,7 +265,8 @@ def live_panel():
     return {"session": s, "rows": rows, "extra": extra, "votes": votes,
             "is_live": bool(sid and sid == s["id"]), "status": engine.live_status,
             "clock": engine.live_clock if sid and sid == s["id"] else None,
-            "flag": engine.live_flag if sid and sid == s["id"] else None}
+            "flag": engine.live_flag if sid and sid == s["id"] else None,
+            "wx": weather.get(s["event_id"], {"WeatherData": engine.live_weather} if sid and sid == s["id"] else None)}
 
 
 def event_grid(ev, only_locked=False):
