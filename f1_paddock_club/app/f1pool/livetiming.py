@@ -235,6 +235,20 @@ def clock(data):
     return {"remaining": int(h * 3600 + m * 60 + sec), "utc": c.get("Utc"), "running": bool(c.get("Extrapolating"))}
 
 
+def race_underway(data):
+    """True once the race has started and at least one full lap is done.
+
+    Before lights out the feed carries the grid plus leftover best-lap and
+    pit values from earlier sessions; those must not show as results.
+    """
+    if session_status(data) in (None, "", "Inactive"):
+        return False
+    try:
+        return int((data.get("LapCount") or {}).get("CurrentLap") or 0) >= 2
+    except (TypeError, ValueError):
+        return False
+
+
 def derive(kind, data, pit_events, drivers=None):
     """Turn timing state into result fields for our game.
 
@@ -254,6 +268,8 @@ def derive(kind, data, pit_events, drivers=None):
         return res
     if kind == "R":
         res["race_pos"] = {i + 1: tla(n) for i, n in enumerate(order)}
+        if not race_underway(data):
+            return res
         fl = fastest_lap_number(data)
         if fl:
             res["fl"] = {1: tla(fl)}
