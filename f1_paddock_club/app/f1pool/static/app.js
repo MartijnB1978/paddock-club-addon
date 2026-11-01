@@ -117,6 +117,21 @@
     };
   }
 
+  // live standings page: refresh on every change, keep the track map element alive
+  var livebox = document.getElementById("live");
+  if (livebox && window.EventSource) {
+    var lfirst = true, lbusy = false;
+    var esl = new EventSource("/stream");
+    esl.onmessage = function () {
+      if (lfirst) { lfirst = false; return; }
+      if (lbusy) return; lbusy = true;
+      fetch(livebox.dataset.url, {cache: "no-store"}).then(function (r) { return r.text(); }).then(function (html) {
+        if (map && map.parentNode) map.parentNode.removeChild(map);
+        livebox.innerHTML = html; if (window.pcClockTick) window.pcClockTick(); mountMap();
+      }).finally(function () { lbusy = false; });
+    };
+  }
+
   // live track map: one persistent element, moved into the slot after every board refresh
   var map = null, mapKey = "", mapTimer = null, unit = 120, NS = "http://www.w3.org/2000/svg";
   function svgEl(tag, attrs) {

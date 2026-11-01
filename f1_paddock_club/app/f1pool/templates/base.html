@@ -15,7 +15,8 @@
     <span>Paddock Club <em>Reeuwijk</em></span>
   </a>
   <nav class="nav">
-    <a href="/" class="{{ 'on' if request.url.path == '/' }}">Standings</a>
+    <a href="/live" class="{{ 'on' if request.url.path == '/live' }}">Live standings</a>
+    <a href="/" class="{{ 'on' if request.url.path == '/' }}">PCR standings</a>
     {% if user %}
     <a href="/predict" class="{{ 'on' if request.url.path.startswith('/predict') }}">Predict</a>
     <a href="/races" class="{{ 'on' if request.url.path.startswith('/race') }}">Races</a>

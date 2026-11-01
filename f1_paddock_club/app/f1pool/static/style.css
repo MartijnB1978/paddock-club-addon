@@ -305,3 +305,10 @@ section + section{margin-top:28px}
 .tc.soft{border-color:#ff3333} .tc.medium{border-color:#ffd12e} .tc.hard{border-color:#f0f0ec}
 .tc.intermediate{border-color:#43b02a} .tc.wet{border-color:#2f8cff}
 .tyre .ts{color:var(--muted);font-size:.7rem}
+
+/* PCR standings: tower spans the page; live standings: session + on-track side by side */
+#board-inner>.tower{grid-column:1/-1}
+.livepage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+.livepage .trackmap{margin-top:0}
+@media (max-width:860px){.livepage{grid-template-columns:minmax(0,1fr)}}
+.livepage>.panel{margin-top:0}

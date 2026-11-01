@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="home-head"><h1>Live standings</h1>
+  {% if deadlines %}<p class="next">Next deadline: <b>{{ deadlines[0].ev_name }}, {{ deadlines[0].name }}</b>
+    <time data-countdown="{{ deadlines[0].start_utc }}">{{ deadlines[0].start_utc|localtime }}</time></p>{% endif %}
+</div>
+<div id="live" data-url="/fragment/live">{% include "_live.html" %}</div>
+{% endblock %}
+{% block scripts %}<script src="/static/app.js?v={{ ASSET_V }}"></script>{% endblock %}

@@ -359,6 +359,25 @@ def home(request: Request, year: int | None = None):
                       "SELECT DISTINCT year FROM events ORDER BY year DESC")])
 
 
+def _live_ctx(request):
+    year = default_year()
+    dl = upcoming_deadlines()
+    return {"request": request, "user": current_user(request), "panel": live_panel(), "deadlines": dl,
+            "nxt": dl[0] if dl else None, "drivers": driver_map(year), "teams": team_map(year)}
+
+
+@app.get("/live", response_class=HTMLResponse)
+def live_page(request: Request):
+    ctx = _live_ctx(request)
+    ctx.pop("request")
+    return render(request, "live.html", **ctx)
+
+
+@app.get("/fragment/live", response_class=HTMLResponse)
+def live_fragment(request: Request):
+    return templates.TemplateResponse(request, "_live.html", _live_ctx(request))
+
+
 @app.get("/fragment/board", response_class=HTMLResponse)
 def board_fragment(request: Request, year: int | None = None):
     year = year or default_year()

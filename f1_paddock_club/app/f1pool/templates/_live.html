@@ -1,0 +1,67 @@
+{% from "_macros.html" import driver, team %}
+{% macro wxbadge(w) %}{% if w %} <span class="wx" title="Weather at the circuit now: {{ w.label }}"><span aria-hidden="true">{{ w.icon }}</span>{% if w.temp is not none %} {{ w.temp }}°C{% endif %}<span class="sr">{{ w.label }}</span></span>{% endif %}{% endmacro %}
+<div id="live-inner" class="livepage">
+<section class="panel live" aria-label="Session">
+  {% if panel %}
+    {% set s = panel.session %}
+    <header class="panel-head">
+      <div>
+        <h2>{{ s.ev_name }}</h2>
+        <p class="muted">{{ s.name }}, {{ s.start_utc|localtime }}{{ wxbadge(panel.wx) }}</p>
+        {% set ck = panel.clock %}
+        {% if ck and ck.total is defined %}<p class="clock">{% if ck.lap %}Lap <b>{{ ck.lap }}</b>{% if ck.total %} of {{ ck.total }} · <b>{{ [ck.total - ck.lap, 0]|max }}</b> {{ 'lap' if ck.total - ck.lap == 1 else 'laps' }} remaining{% endif %}{% else %}{{ ck.total }} laps{% endif %}</p>
+        {% elif ck %}<p class="clock">{% if ck.part %}<b>{{ ck.part }}</b> · {% endif %}<span
+          {% if ck.end_utc %}data-remaining-until="{{ ck.end_utc }}"{% endif %}>{{ ck|clockleft }}</span> remaining{% if not ck.running and ck.remaining > 0 %} (paused){% endif %}</p>{% endif %}
+      </div>
+      {% if panel.is_live %}<div class="badges">{% if panel.flag %}<span class="badge flag {{ panel.flag.kind }}">{{ panel.flag.label }}{% if panel.flag.restart_utc %} · restart {{ panel.flag.restart_utc|localtime('%H:%M') }}{% endif %}</span>{% endif %}<span class="badge live-dot">Live</span></div>
+      {% elif s.status == 'final' %}<span class="badge">Official</span>
+      {% else %}<span class="badge">Provisional</span>{% endif %}
+    </header>
+    {% if panel.rows %}
+    <ol class="order">
+      {% for r in panel.rows[:10] %}
+      {% set ty = panel.tyres.get(r.value) if panel.tyres else none %}
+      <li><span class="p">{{ r.slot }}</span>{{ driver(r.value, drivers, teams, true) }}{% if ty %}<span class="tyre" title="{{ ty.compound }}{{ ' (new)' if ty.new }}, {{ ty.age }} {{ 'lap' if ty.age == 1 else 'laps' }} old, {{ ty.stops }} {{ 'stop' if ty.stops == 1 else 'stops' }}"><i class="tc {{ ty.compound|lower }}">{{ ty.letter }}</i><span class="ta">{{ ty.age }}</span>{% if ty.stops %}<span class="ts">{{ ty.stops }}×</span>{% endif %}</span>{% endif %}</li>
+      {% endfor %}
+    </ol>
+    {% else %}
+      <p class="muted pad">Waiting for timing data.</p>
+    {% endif %}
+    {% if panel.extra %}
+    <dl class="extras">
+      {% if panel.extra.fl %}<div><dt>Fastest lap</dt><dd>{{ driver(panel.extra.fl, drivers, teams) }}</dd></div>{% endif %}
+      {% if panel.extra.fp %}<div><dt>Fastest pit stop</dt><dd>{{ team(panel.extra.fp, teams) }}</dd></div>{% endif %}
+      {% if panel.extra.dotd %}<div><dt>Driver of the Day</dt><dd>{{ driver(panel.extra.dotd, drivers, teams) }}</dd></div>{% endif %}
+    </dl>
+    {% endif %}
+    {% if panel.votes %}
+    <h3 class="vh">Driver of the Day vote</h3>
+    <ol class="votes" aria-label="Driver of the Day fan vote">
+      {% for v in panel.votes %}<li><span class="vn">{{ driver(v.tla, drivers, teams) }}</span>
+        <span class="vbar"><span style="width:{{ (v.pct / panel.votes[0].pct * 100)|round(1) }}%;--tc:#{{ (drivers.get(v.tla) or {}).get('colour') or '8d97aa' }}"></span></span>
+        <span class="vp">{{ '%g'|format(v.pct) }}%</span></li>{% endfor %}
+    </ol>
+    {% endif %}
+  {% else %}
+    {% if nxt %}
+    <header class="panel-head"><div><h2>{{ nxt.ev_name }}</h2><p class="muted">{{ nxt.name }}, {{ nxt.start_utc|localtime }}{{ wxbadge(wx_get(nxt.event_id)) }}</p></div>
+      <span class="badge">Next</span></header>
+    <p class="muted pad">Live timing appears here when this session starts.</p>
+    {% else %}
+    <p class="muted pad">Live timing appears here when the next session starts.</p>
+    {% endif %}
+  {% endif %}
+</section>
+{% if panel and (panel.is_live or panel.rc) %}
+<section class="panel trackcard" aria-label="Track">
+  <header class="panel-head"><div><h2>On track</h2><p class="muted">Live positions and Race Control</p></div></header>
+    {% if panel.is_live %}<div id="trackmap-slot"></div>{% endif %}
+    {% if panel.rc %}
+    <h3 class="vh">Race Control</h3>
+    <ol class="rc" aria-label="Latest Race Control messages">
+      {% for m in panel.rc %}<li class="{{ m.kind }}"><time>{{ m.utc|localtime('%H:%M') }}</time><span>{{ m.text }}</span></li>{% endfor %}
+    </ol>
+    {% endif %}
+</section>
+{% endif %}
+</div>

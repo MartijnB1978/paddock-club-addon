@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block main %}
 <div class="home-head">
-  <h1>Standings {{ year }}</h1>
+  <h1>PCR standings {{ year }}</h1>
   {% if years|length > 1 %}
   <form method="get" class="yearpick"><label class="sr" for="y">Season</label>
     <select id="y" name="year" onchange="this.form.submit()">{% for y in years %}<option {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}</select>
