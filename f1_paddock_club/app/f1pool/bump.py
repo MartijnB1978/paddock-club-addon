@@ -148,7 +148,7 @@ def report_svg(event_id):
 
 
 # ------------------------------------------------------------- backfill ---
-REPLAY_TOPICS = ["DriverList", "SessionStatus", "TimingData", "TimingStats", "LapCount", "PitStopSeries", "PitStop"]
+REPLAY_TOPICS = ["DriverList", "SessionStatus", "TimingData", "TimingStats", "PitStopSeries", "PitStop"]
 
 
 def missing_laps(event_id):
@@ -182,9 +182,9 @@ def backfill(http, event_id, path):
     msgs, seen = [], {}
     for order, topic in enumerate(REPLAY_TOPICS):
         text = http.get(f"{path}{topic}.jsonStream")
-        seen[topic] = http.last_status
+        seen[topic] = getattr(http, "last_status", "")
         if not text:
-            if topic in ("TimingData", "LapCount"):
+            if topic == "TimingData":
                 return 0
             continue
         msgs += [(ts, order, topic, m) for ts, m in _stream(text)]
@@ -204,6 +204,7 @@ def backfill(http, event_id, path):
 
     def snap(lap):
         data, pits = st.snapshot()
+        data["LapCount"] = {"CurrentLap": lap + 1}      # end of `lap`: what the live feed would show
         res = dict(pre) | lt.derive("R", data, pits, known)
         rows = []
         for r in board:
@@ -213,22 +214,29 @@ def backfill(http, event_id, path):
             rows.append({"user_id": uid, "name": r["name"], "wins": r["wins"], "total": before + got - pen.get(uid, 0)})
         snaps[lap] = _ordered(rows, "total")
 
+    # lap number = laps completed by the leader (the archive's LapCount stream can stop early)
     for _ts, _o, topic, m in msgs:
-        if topic == "LapCount" and isinstance(m, dict):
-            try:
-                new = int(m.get("CurrentLap") or cur)
-            except (TypeError, ValueError):
-                new = cur
-            laps_seen.append(new)
-            if new > cur >= 1 and cur in missing:
-                snap(cur)                      # state at the end of lap `cur`
-            cur = max(cur, new)
+        if topic == "LapCount":
+            continue
         st.apply(topic, m)
-    counts = {t: sum(1 for x in msgs if x[2] == t) for t in ("LapCount", "TimingData")}
+        if topic != "TimingData" or not isinstance(m, dict):
+            continue
+        done = cur
+        for ln in (m.get("Lines") or {}).values():
+            try:
+                done = max(done, int((ln or {}).get("NumberOfLaps") or 0))
+            except (TypeError, ValueError, AttributeError):
+                pass
+        while cur < done:
+            cur += 1
+            laps_seen.append(cur)
+            if cur in missing:
+                snap(cur)                      # leader just completed lap `cur`
+    counts = {t: sum(1 for x in msgs if x[2] == t) for t in ("TimingData",)}
     db.logmsg("info", f"Lap chart replay: archive laps {min(laps_seen, default=0)}-{max(laps_seen, default=0)} "
-                      f"(first values {laps_seen[:5]}), messages {counts}, missing laps "
+                      f"messages {counts}, missing laps "
                       f"{min(missing)}-{max(missing)} ({len(missing)}), filled {sorted(snaps)[:10]}, "
-                      f"source {seen.get('LapCount')}")
+                      f"source {seen.get('TimingData')}")
     if not snaps:
         return 0
     with db.tx() as c:
