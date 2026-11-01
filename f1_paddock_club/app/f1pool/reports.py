@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from . import db, scoring, standings
+from . import bump, db, scoring, standings
 
 log = logging.getLogger("reports")
 logging.getLogger("fontTools").setLevel(logging.WARNING)
@@ -70,7 +70,7 @@ def _context(kind, year, upto_round):
         evs = [dict(e) | {"short": _short(e["name"]), "flag": flag_uri(standings.iso2(dict(e))),
                           "best": max((r["events"].get(e["id"], 0) for r in board), default=0)}
                for e in events if any(e["id"] in r["events"] for r in board)]
-        ctx.update(board=board, pevents=evs)
+        ctx.update(board=board, pevents=evs, bump_svg=bump.report_svg(ev["id"]) if ev else None)
     return ctx
 
 

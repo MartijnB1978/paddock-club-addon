@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS player_laps(
 RACE_FIELDS = ("race_pos", "fl", "dotd", "fp")   # what the race itself decides; the rest is known before it
 PALETTE = ["#ff5a5f", "#2fd26f", "#ffc83d", "#4da3ff", "#b14dff", "#ff8a3d", "#2ee6d6", "#ff6fcf",
            "#c8e64d", "#9aa7ff", "#ffffff", "#e6a15c", "#5cd68a", "#d65c5c", "#5cc2e6", "#a35ce6"]
+# same order as PALETTE, darker so every line reads on white paper
+PRINT = ["#d62f35", "#169c4b", "#c98f00", "#1f6fd1", "#8a2be2", "#e0660f", "#0f9e94", "#d13c9f",
+         "#7f9c12", "#5a67d8", "#3c4352", "#a8692d", "#2f8f57", "#a33a3a", "#2b8ab3", "#7a3fb8"]
 ROW = 26          # px per position, shared by the SVG and the labels
 
 
@@ -56,10 +59,13 @@ def record(event_id, lap, total):
                           (event_id, lap, r["user_id"], rank, r["total"]))
 
 
-def chart(year, me=None):
-    """Data for the bump chart of the latest race of the season that has recorded laps."""
-    ev = db.q1("SELECT e.* FROM events e JOIN race_laps l ON l.event_id=e.id WHERE e.year=? "
-               "ORDER BY e.round DESC LIMIT 1", year)
+def chart(year, me=None, event_id=None):
+    """Data for the bump chart of one race, by default the latest of the season with recorded laps."""
+    if event_id:
+        ev = db.q1("SELECT e.* FROM events e JOIN race_laps l ON l.event_id=e.id WHERE e.id=?", event_id)
+    else:
+        ev = db.q1("SELECT e.* FROM events e JOIN race_laps l ON l.event_id=e.id WHERE e.year=? "
+                   "ORDER BY e.round DESC LIMIT 1", year)
     if not ev:
         return None
     laps = db.q1("SELECT * FROM race_laps WHERE event_id=?", ev["id"])
@@ -85,7 +91,8 @@ def chart(year, me=None):
         p = pts[uid]
         first, last = p[0], p[-1]
         players.append({
-            "id": uid, "name": names.get(uid, "?"), "colour": PALETTE[i % len(PALETTE)], "me": uid == me,
+            "id": uid, "name": names.get(uid, "?"), "colour": PALETTE[i % len(PALETTE)],
+            "print": PRINT[i % len(PRINT)], "me": uid == me, "pts": p,
             "rank": last[1], "total": last[2], "move": first[1] - last[1] if first[0] == 0 else 0,
             "path": " ".join(f"{x},{(rk - 0.5) * ROW:g}" for x, rk, _ in p)})
     players.sort(key=lambda r: r["rank"])
@@ -93,3 +100,48 @@ def chart(year, me=None):
     ticks = [0] + [t for t in range(step, total, step) if total - t >= step * 0.6] + [total]
     return {"ev": ev, "n": n, "row": ROW, "w": end_x, "h": n * ROW, "players": players,
             "current": laps["current"], "total": laps["total"], "finished": finished, "ticks": ticks}
+
+
+def _esc(s):
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def report_svg(event_id):
+    """Finished race only: the bump chart as a self-contained SVG for the PDF report (A4 landscape width)."""
+    ev = db.q1("SELECT year FROM events WHERE id=?", event_id)
+    c = chart(ev["year"], event_id=event_id) if ev else None
+    if not c or not c["finished"]:
+        return None
+    row = max(10, min(34, 520 // c["n"]))         # fill the page, whatever the number of players
+    left, right, top, W = 22, 150, 4, 1000
+    pw, ph = W - left - right, c["n"] * row
+    H = top + ph + 18
+    X = lambda x: left + x / c["w"] * pw          # noqa: E731
+    Y = lambda rk: top + (rk - 0.5) * row         # noqa: E731
+    font = 'font-family="BL, DejaVu Sans, sans-serif"'
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="100%" {font}>']
+    for t in c["ticks"]:
+        out.append(f'<line x1="{X(t):.1f}" x2="{X(t):.1f}" y1="{top}" y2="{top + ph}" stroke="#e1e4ea" stroke-width="0.8"/>')
+        lab = "Start" if t == 0 else t
+        anchor = "start" if t == 0 else "middle"
+        out.append(f'<text x="{X(t):.1f}" y="{top + ph + 13}" font-size="9" fill="#5b6475" text-anchor="{anchor}">{lab}</text>')
+    out.append(f'<text x="{X(c["w"]):.1f}" y="{top + ph + 13}" font-size="9" fill="#5b6475" text-anchor="end" font-weight="600">Final</text>')
+    for i in range(1, c["n"] + 1):
+        out.append(f'<text x="{left - 6}" y="{Y(i) + 3.2:.1f}" font-size="9" fill="#5b6475" text-anchor="end">{i}</text>')
+    for p in reversed(c["players"]):
+        pts = " ".join(f"{X(x):.1f},{Y(rk):.1f}" for x, rk, _ in p["pts"])
+        out.append(f'<polyline points="{pts}" fill="none" stroke="{p["print"]}" stroke-width="2" '
+                   'stroke-linejoin="round" stroke-linecap="round"/>')
+    for p in c["players"]:
+        y = Y(p["rank"])
+        mv = ""
+        if p["move"] > 0:
+            mv = f'<tspan fill="#178a43" font-weight="600"> ▲{p["move"]}</tspan>'
+        elif p["move"] < 0:
+            mv = f'<tspan fill="#c62f35" font-weight="600"> ▼{-p["move"]}</tspan>'
+        out.append(f'<circle cx="{left + pw + 9}" cy="{y:.1f}" r="3.6" fill="{p["print"]}"/>'
+                   f'<text x="{left + pw + 17}" y="{y + 3.3:.1f}" font-size="10" fill="#141821" font-weight="600">'
+                   f'{_esc(p["name"])}{mv}</text>'
+                   f'<text x="{W - 2}" y="{y + 3.3:.1f}" font-size="10" fill="#5b6475" text-anchor="end">{p["total"]}</text>')
+    out.append("</svg>")
+    return "".join(out)
