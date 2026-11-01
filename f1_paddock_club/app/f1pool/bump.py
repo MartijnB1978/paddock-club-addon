@@ -59,8 +59,25 @@ def record(event_id, lap, total):
                           (event_id, lap, r["user_id"], rank, r["total"]))
 
 
-def chart(year, me=None, event_id=None):
-    """Data for the bump chart of one race, by default the latest of the season with recorded laps."""
+def _race_view(pts):
+    """Turn season positions into race-only positions: points scored with this race's predictions
+    (race top 10, fastest lap, DotD, pit stop) = season total now minus season total at the start.
+    Ties keep the season order from the start."""
+    base = {uid: (p[0][2], p[0][1]) for uid, p in pts.items()}        # (total, rank) at the first point
+    by_x = {}
+    for uid, p in pts.items():
+        for x, _rk, tot in p:
+            by_x.setdefault(x, []).append((uid, tot - base[uid][0]))
+    out = {uid: [] for uid in pts}
+    for x in sorted(by_x):
+        for rank, (uid, got) in enumerate(sorted(by_x[x], key=lambda t: (-t[1], base[t[0]][1])), start=1):
+            out[uid].append([x, rank, got])
+    return out
+
+
+def chart(year, me=None, event_id=None, mode="season"):
+    """Data for the bump chart of one race, by default the latest of the season with recorded laps.
+    mode 'season': position in the season standings; 'race': position on this race's points only."""
     if event_id:
         ev = db.q1("SELECT e.* FROM events e JOIN race_laps l ON l.event_id=e.id WHERE e.id=?", event_id)
     else:
@@ -84,6 +101,8 @@ def chart(year, me=None, event_id=None):
         for rank, r in _ordered(board, "total"):
             if r["user_id"] in pts:
                 pts[r["user_id"]].append([end_x, rank, r["total"]])
+    if mode == "race":
+        pts = _race_view(pts)
     names = {u["id"]: u["name"] for u in db.q("SELECT id, name FROM users")}
     n = max(len(pts), max(p[1] for v in pts.values() for p in v))
     players = []
@@ -93,12 +112,13 @@ def chart(year, me=None, event_id=None):
         players.append({
             "id": uid, "name": names.get(uid, "?"), "colour": PALETTE[i % len(PALETTE)],
             "print": PRINT[i % len(PRINT)], "me": uid == me, "pts": p,
-            "rank": last[1], "total": last[2], "move": first[1] - last[1] if first[0] == 0 else 0,
+            "rank": last[1], "total": last[2],
+            "move": first[1] - last[1] if first[0] == 0 and mode == "season" else 0,
             "path": " ".join(f"{x},{(rk - 0.5) * ROW:g}" for x, rk, _ in p)})
     players.sort(key=lambda r: r["rank"])
     step = 5 if total <= 40 else 10
     ticks = [0] + [t for t in range(step, total, step) if total - t >= step * 0.6] + [total]
-    return {"ev": ev, "n": n, "row": ROW, "w": end_x, "h": n * ROW, "players": players,
+    return {"ev": ev, "mode": mode, "n": n, "row": ROW, "w": end_x, "h": n * ROW, "players": players,
             "current": laps["current"], "total": laps["total"], "finished": finished, "ticks": ticks}
 
 

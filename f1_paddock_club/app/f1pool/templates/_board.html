@@ -1,5 +1,35 @@
 {% from "_macros.html" import driver, team %}
 {% from "_predgrid.html" import pred_grid %}
+{% macro bumpchart(bc) %}
+<section class="bump" aria-label="Players' {{ 'race' if bc.mode == 'race' else 'season' }} positions lap by lap">
+  <header class="panel-head">
+    <div><h2>Players lap by lap ({{ 'Race' if bc.mode == 'race' else 'Season' }})</h2>
+      <p class="muted"><a href="/race/{{ bc.ev.id }}">{{ bc.ev.name }}</a> · {% if bc.mode == 'race' %}points from this race's predictions only · {% endif %}{% if bc.finished %}start to final {{ 'result' if bc.mode == 'race' else 'standings' }}{% else %}lap {{ bc.current }}{% if bc.total %} of {{ bc.total }}{% endif %}{% endif %}</p></div>
+    {% if not bc.finished %}<span class="badge live-dot">Live</span>{% else %}<span class="badge">Race</span>{% endif %}
+  </header>
+  <div class="bump-grid" style="--row:{{ bc.row }}px;--n:{{ bc.n }}">
+    <ol class="bump-pos" aria-hidden="true">{% for i in range(1, bc.n + 1) %}<li>{{ i }}</li>{% endfor %}</ol>
+    <div class="bump-plot">
+      <svg viewBox="0 0 {{ bc.w }} {{ bc.h }}" preserveAspectRatio="none" role="img"
+           aria-label="Line chart of each player's position from the start to {{ 'the final standings' if bc.finished else 'lap ' ~ bc.current }}">
+        {% for t in bc.ticks %}<line class="tick" x1="{{ t }}" x2="{{ t }}" y1="0" y2="{{ bc.h }}"/>{% endfor %}
+        {% for p in bc.players|reverse %}<polyline class="{{ 'me' if p.me }}" points="{{ p.path }}" style="--c:{{ p.colour }}"><title>{{ p.name }}: P{{ p.rank }}, {{ p.total }} pts{{ ' this race' if bc.mode == 'race' }}</title></polyline>{% endfor %}
+      </svg>
+      <div class="bump-x" aria-hidden="true">
+        {% for t in bc.ticks %}<span class="{{ 'minor' if loop.index is even and not loop.last }}{{ ' lastlap' if loop.last and bc.finished }}" style="left:{{ (t / bc.w * 100)|round(2) }}%">{{ 'Start' if t == 0 else t }}</span>{% endfor %}
+        {% if bc.finished %}<span class="fin" style="left:100%">Final</span>{% endif %}
+      </div>
+    </div>
+    <ol class="bump-names">
+      {% for p in bc.players %}<li class="{{ 'me' if p.me }}" style="--c:{{ p.colour }};top:{{ (p.rank - 1) * bc.row }}px">
+        <i></i><span class="bn">{{ p.name }}</span>
+        {% if p.move > 0 %}<span class="mv up">▲{{ p.move }}</span>{% elif p.move < 0 %}<span class="mv down">▼{{ -p.move }}</span>{% endif %}
+        <span class="bt">{{ ('+' ~ p.total) if bc.mode == 'race' and p.total > 0 else p.total }}</span>
+      </li>{% endfor %}
+    </ol>
+  </div>
+</section>
+{% endmacro %}
 <div id="board-inner">
 <section class="tower" aria-label="Players standings">
   <div class="tower-head">
@@ -74,36 +104,8 @@
     {% endif %}
   {% endif %}
 </section>
-{% if bc %}
-<section class="bump" aria-label="Players' positions through the race">
-  <header class="panel-head">
-    <div><h2>Players lap by lap</h2>
-      <p class="muted"><a href="/race/{{ bc.ev.id }}">{{ bc.ev.name }}</a> · {% if bc.finished %}start to final standings{% else %}lap {{ bc.current }}{% if bc.total %} of {{ bc.total }}{% endif %}{% endif %}</p></div>
-    {% if not bc.finished %}<span class="badge live-dot">Live</span>{% else %}<span class="badge">Race</span>{% endif %}
-  </header>
-  <div class="bump-grid" style="--row:{{ bc.row }}px;--n:{{ bc.n }}">
-    <ol class="bump-pos" aria-hidden="true">{% for i in range(1, bc.n + 1) %}<li>{{ i }}</li>{% endfor %}</ol>
-    <div class="bump-plot">
-      <svg viewBox="0 0 {{ bc.w }} {{ bc.h }}" preserveAspectRatio="none" role="img"
-           aria-label="Line chart of each player's position from the start to {{ 'the final standings' if bc.finished else 'lap ' ~ bc.current }}">
-        {% for t in bc.ticks %}<line class="tick" x1="{{ t }}" x2="{{ t }}" y1="0" y2="{{ bc.h }}"/>{% endfor %}
-        {% for p in bc.players|reverse %}<polyline class="{{ 'me' if p.me }}" points="{{ p.path }}" style="--c:{{ p.colour }}"><title>{{ p.name }}: P{{ p.rank }}, {{ p.total }} pts</title></polyline>{% endfor %}
-      </svg>
-      <div class="bump-x" aria-hidden="true">
-        {% for t in bc.ticks %}<span class="{{ 'minor' if loop.index is even and not loop.last }}{{ ' lastlap' if loop.last and bc.finished }}" style="left:{{ (t / bc.w * 100)|round(2) }}%">{{ 'Start' if t == 0 else t }}</span>{% endfor %}
-        {% if bc.finished %}<span class="fin" style="left:100%">Final</span>{% endif %}
-      </div>
-    </div>
-    <ol class="bump-names">
-      {% for p in bc.players %}<li class="{{ 'me' if p.me }}" style="--c:{{ p.colour }};top:{{ (p.rank - 1) * bc.row }}px">
-        <i></i><span class="bn">{{ p.name }}</span>
-        {% if p.move > 0 %}<span class="mv up">▲{{ p.move }}</span>{% elif p.move < 0 %}<span class="mv down">▼{{ -p.move }}</span>{% endif %}
-        <span class="bt">{{ p.total }}</span>
-      </li>{% endfor %}
-    </ol>
-  </div>
-</section>
-{% endif %}
+{% if bcr %}{{ bumpchart(bcr) }}{% endif %}
+{% if bc %}{{ bumpchart(bc) }}{% endif %}
 {% if lg %}
 <section class="livegrid" aria-label="Live predictions">
   <header class="panel-head">
