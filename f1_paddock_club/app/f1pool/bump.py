@@ -19,6 +19,25 @@ ROW = 26          # px per position, shared by the SVG and the labels
 
 def init():
     db.conn().executescript(SCHEMA)
+    cols = {r["name"] for r in db.q("PRAGMA table_info(player_laps)")}
+    if "race" not in cols:      # points from this race's predictions only (race chart)
+        db.ex("ALTER TABLE player_laps ADD COLUMN race INTEGER")
+
+
+def race_points(event_id, res=None, preds=None, rules=None, year=None):
+    """{user_id: points} from this race's predictions only (race top 10, fastest lap, DotD, pit stop).
+    Not the season total: that also moves with the live championship-prediction points."""
+    if res is None:
+        res = scoring.load_results(event_id)
+    res = {k: v for k, v in res.items() if k in RACE_FIELDS}
+    if preds is None:
+        preds = scoring.load_predictions(event_id)
+    if rules is None:
+        rules = scoring.rules_for(year or db.q1("SELECT year FROM events WHERE id=?", event_id)["year"])
+    return {uid: scoring.score_event(p, res, rules)[0] if res else 0 for uid, p in preds.items()}
+
+
+INSERT = "INSERT OR {} INTO player_laps(event_id, lap, user_id, rank, total, race) VALUES(?,?,?,?,?,?)"
 
 
 def _ordered(rows, key):
@@ -47,16 +66,16 @@ def record(event_id, lap, total):
         return
     have_start = db.q1("SELECT 1 FROM player_laps WHERE event_id=? AND lap=0 LIMIT 1", event_id)
     start = None if have_start else _ordered(_start_rows(ev, board), "start")
+    rp = race_points(event_id, year=ev["year"])
     with db.tx() as c:
         c.execute("INSERT OR REPLACE INTO race_laps VALUES(?,?,?,?)", (event_id, lap, total, db.iso(db.now_utc())))
         if start:
             for rank, r in start:
-                c.execute("INSERT OR REPLACE INTO player_laps VALUES(?,?,?,?,?)",
-                          (event_id, 0, r["user_id"], rank, r["start"]))
+                c.execute(INSERT.format("REPLACE"), (event_id, 0, r["user_id"], rank, r["start"], 0))
         if lap > 0:
             for rank, r in _ordered(board, "total"):
-                c.execute("INSERT OR REPLACE INTO player_laps VALUES(?,?,?,?,?)",
-                          (event_id, lap, r["user_id"], rank, r["total"]))
+                c.execute(INSERT.format("REPLACE"),
+                          (event_id, lap, r["user_id"], rank, r["total"], rp.get(r["user_id"], 0)))
 
 
 def _race_view(pts):
@@ -66,8 +85,8 @@ def _race_view(pts):
     base = {uid: (p[0][2], p[0][1]) for uid, p in pts.items()}        # (total, rank) at the first point
     by_x = {}
     for uid, p in pts.items():
-        for x, _rk, tot in p:
-            by_x.setdefault(x, []).append((uid, tot - base[uid][0]))
+        for x, _rk, tot, race in p:
+            by_x.setdefault(x, []).append((uid, race if race is not None else tot - base[uid][0]))
     out = {uid: [] for uid in pts}
     for x in sorted(by_x):
         for rank, (uid, got) in enumerate(sorted(by_x[x], key=lambda t: (-t[1], base[t[0]][1])), start=1):
@@ -90,19 +109,22 @@ def chart(year, me=None, event_id=None, mode="season"):
     finished = bool(race and race["finished_at"])
     total = laps["total"] or laps["current"] or 1
     pts = {}
-    for r in db.q("SELECT lap, user_id, rank, total FROM player_laps WHERE event_id=? ORDER BY lap", ev["id"]):
-        pts.setdefault(r["user_id"], []).append([r["lap"], r["rank"], r["total"]])
+    for r in db.q("SELECT lap, user_id, rank, total, race FROM player_laps WHERE event_id=? ORDER BY lap", ev["id"]):
+        pts.setdefault(r["user_id"], []).append([r["lap"], r["rank"], r["total"], r["race"]])
     if not pts:
         return None
     end_x = total
     if finished:            # after the flag: standings including DotD, pit stop and any corrections
         end_x = total + max(2, round(total * 0.08))
         board, _, _ = scoring.leaderboard(year, upto_round=ev["round"])
+        rp = race_points(ev["id"], year=ev["year"])
         for rank, r in _ordered(board, "total"):
             if r["user_id"] in pts:
-                pts[r["user_id"]].append([end_x, rank, r["total"]])
+                pts[r["user_id"]].append([end_x, rank, r["total"], rp.get(r["user_id"], 0)])
     if mode == "race":
         pts = _race_view(pts)
+    else:
+        pts = {uid: [q[:3] for q in p] for uid, p in pts.items()}
     names = {u["id"]: u["name"] for u in db.q("SELECT id, name FROM users")}
     n = max(len(pts), max(p[1] for v in pts.values() for p in v))
     players = []
@@ -233,7 +255,8 @@ def backfill(http, event_id, path):
             before = r["total"] - r["events"].get(event_id, 0)
             got = scoring.score_event(preds.get(uid, {}), res, rules)[0]
             rows.append({"user_id": uid, "name": r["name"], "wins": r["wins"], "total": before + got - pen.get(uid, 0)})
-        snaps[lap] = _ordered(rows, "total")
+        rp = race_points(event_id, res, preds, rules)
+        snaps[lap] = [(rank, r | {"race": rp.get(r["user_id"], 0)}) for rank, r in _ordered(rows, "total")]
 
     # lap number = laps completed by the leader (the archive's LapCount stream can stop early)
     for _ts, _o, topic, m in msgs:
@@ -263,8 +286,7 @@ def backfill(http, event_id, path):
     with db.tx() as c:
         for lap, rows in snaps.items():
             for rank, r in rows:
-                c.execute("INSERT OR IGNORE INTO player_laps VALUES(?,?,?,?,?)",
-                          (event_id, lap, r["user_id"], rank, r["total"]))
+                c.execute(INSERT.format("IGNORE"), (event_id, lap, r["user_id"], rank, r["total"], r["race"]))
     return len(snaps)
 
 
@@ -300,8 +322,10 @@ def backfill_series(event_id, data):
     """Fill missed laps from the live feed: positions from LapSeries; fastest lap and fastest pit stop
     only where the feed shows they had already happened by that lap. Returns laps added."""
     missing = set(missing_laps(event_id))
+    no_race = {r["lap"] for r in db.q("SELECT DISTINCT lap FROM player_laps WHERE event_id=? AND lap>0 "
+                                       "AND race IS NULL", event_id)}
     order = _lap_positions(data)
-    laps = sorted(missing & set(order))
+    laps = sorted((missing | no_race) & set(order))
     if not laps:
         return 0
     ev = db.q1("SELECT * FROM events WHERE id=?", event_id)
@@ -351,7 +375,13 @@ def backfill_series(event_id, data):
                 got = scoring.score_event(preds.get(uid, {}), res, rules)[0]
                 rows.append({"user_id": uid, "name": r["name"], "wins": r["wins"],
                              "total": before + got - pen.get(uid, 0)})
-            for rank, r in _ordered(rows, "total"):
-                c.execute("INSERT OR IGNORE INTO player_laps VALUES(?,?,?,?,?)",
-                          (event_id, lap, r["user_id"], rank, r["total"]))
+            rp = race_points(event_id, res, preds, rules)
+            if lap in missing:
+                for rank, r in _ordered(rows, "total"):
+                    c.execute(INSERT.format("IGNORE"),
+                              (event_id, lap, r["user_id"], rank, r["total"], rp.get(r["user_id"], 0)))
+            else:   # recorded before race points were stored: add them, keep the recorded season data
+                for uid, got in rp.items():
+                    c.execute("UPDATE player_laps SET race=? WHERE event_id=? AND lap=? AND user_id=? "
+                              "AND race IS NULL", (got, event_id, lap, uid))
     return len(laps)

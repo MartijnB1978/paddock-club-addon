@@ -498,10 +498,10 @@ class Engine:
         try:
             bump.record(ev_id, lap, total)
             self._bump_mark = (ev_id, lap, time.time())
-            if data.get("LapSeries") and bump.missing_laps(ev_id):
+            if data.get("LapSeries"):
                 n = bump.backfill_series(ev_id, data)
                 if n:
-                    db.logmsg("info", f"Lap chart: {n} missed laps filled in from the live lap history")
+                    db.logmsg("info", f"Lap chart: {n} laps filled in or completed from the live lap history")
             self.backfill_bump(ev_id, path)
         except Exception as exc:  # noqa: BLE001  never let the chart break live results
             db.logmsg("warning", f"Lap chart snapshot failed: {exc}")
