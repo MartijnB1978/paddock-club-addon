@@ -96,6 +96,8 @@ def check(engine, now):
                 "SELECT slot, value, source FROM results WHERE event_id=? AND field=?", s["event_id"], field)}
             top = {k: v for k, v in slots.items() if k <= 10}
             mine = {k: v[0] for k, v in cur.items() if k <= 10}
+            if any(src in ("fia",) for _v, src in cur.values()):
+                continue                                          # the FIA classification is already in
             if all(cur.get(k, (None, ""))[1] in ("official", "admin") and mine.get(k) == v for k, v in top.items()):
                 continue                                          # already applied
             feed_differs = any(mine.get(k) not in (None, v) for k, v in top.items())

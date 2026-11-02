@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, bump, chat, db, dotd, track, weather, importer, mailer, reports, scoring, standings
+from . import auth, bump, chat, db, dotd, fia, track, weather, importer, mailer, reports, scoring, standings
 from .engine import Engine
 from .livetiming import car_positions as lt_positions
 from .schedule import DURATION, SCORED
@@ -31,6 +31,7 @@ HERE = Path(__file__).parent
 db.init()
 bump.init()
 chat.init()
+fia.init()
 _secret_file = DATA_DIR / "secret.key"
 if not _secret_file.exists():
     _secret_file.parent.mkdir(parents=True, exist_ok=True)
@@ -272,6 +273,7 @@ def live_panel():
             "clock": engine.live_clock if sid and sid == s["id"] else None,
             "flag": engine.live_flag if sid and sid == s["id"] else None,
             "rc": engine.live_rc if sid and sid == s["id"] else [],
+            "stewards": fia.stewards(s["event_id"]), "fiadocs": fia.classification_docs(s["event_id"]),
             "tyres": engine.live_tyres if sid and sid == s["id"] else {},
             "wx": weather.get(s["event_id"], {"WeatherData": engine.live_weather} if sid and sid == s["id"] else None)}
 

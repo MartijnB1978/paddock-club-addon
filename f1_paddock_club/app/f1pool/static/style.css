@@ -353,3 +353,8 @@ section + section{margin-top:28px}
 .editbar .left{margin-right:auto}
 .editbar button{font-size:.8rem;padding:3px 10px}
 .editbar .cancel{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;cursor:pointer}
+
+.rc.fia a{color:var(--text);text-decoration:none}
+.rc.fia a:hover{text-decoration:underline}
+.trackcard .note{font-size:.75rem;margin:6px 0 0}
+.trackcard .note a{color:var(--muted)}

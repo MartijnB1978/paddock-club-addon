@@ -53,7 +53,7 @@
     {% endif %}
   {% endif %}
 </section>
-{% if panel and (panel.is_live or panel.rc) %}
+{% if panel and (panel.is_live or panel.rc or panel.stewards) %}
 <section class="panel trackcard" aria-label="Track">
   <header class="panel-head"><div><h2>On track</h2><p class="muted">Live positions and Race Control</p></div></header>
     {% if panel.is_live %}<div id="trackmap-slot"></div>{% endif %}
@@ -62,6 +62,14 @@
     <ol class="rc" aria-label="Latest Race Control messages">
       {% for m in panel.rc %}<li class="{{ m.kind }}"><time>{{ m.utc|localtime('%H:%M') }}</time><span>{{ m.text }}</span></li>{% endfor %}
     </ol>
+    {% endif %}
+    {% if panel.stewards or panel.fiadocs %}
+    <h3 class="vh">FIA stewards</h3>
+    <ol class="rc fia" aria-label="FIA stewards decisions this weekend">
+      {% for d in panel.fiadocs %}<li class="green"><time>FIA</time><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title }}</a></li>{% endfor %}
+      {% for d in panel.stewards %}<li class="steward"><time>{{ d.published[-5:] }}</time><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title }}</a></li>{% endfor %}
+    </ol>
+    <p class="note muted">Official FIA documents (PDF) · <a href="https://www.fia.com/documents/championships/fia-formula-one-world-championship-14" target="_blank" rel="noopener">all documents</a></p>
     {% endif %}
 </section>
 {% endif %}
