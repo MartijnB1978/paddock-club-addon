@@ -44,6 +44,11 @@ STEWARD_RE = re.compile(r"^(infringe?ment|decision|summons|offence|reprimand|pen
 
 def init():
     db.conn().executescript(SCHEMA)
+    for d in db.q("SELECT rowid, title, published FROM fia_docs WHERE title LIKE '%Published on%'"):
+        m = re.search(r"Published on\s+(\d{2}\.\d{2}\.\d{2,4}\s+\d{2}:\d{2})", d["title"])
+        db.ex("UPDATE fia_docs SET title=?, published=? WHERE rowid=?",
+              re.split(r"\s+Published on\b", d["title"])[0].strip(),
+              d["published"] or (m.group(1) if m else ""), d["rowid"])
 
 
 def _plain(s):
@@ -82,6 +87,9 @@ def list_docs(ev):
         tail = tail.split("href=", 1)[0]                     # only text before the next document
         when = re.search(r"(\d{2}\.\d{2}\.\d{2,4}\s+\d{2}:\d{2})", re.sub(r"<[^>]+>", " ", tail))
         title = re.sub(r"^Doc(ument)?\s*\d+\s*[-–:]\s*", "", title, flags=re.I)
+        title = re.split(r"\s+Published on\b", title, flags=re.I)[0].strip()
+        pub = re.search(r"Published on\s+(\d{2}\.\d{2}\.\d{2,4}\s+\d{2}:\d{2})", inner + " " + tail, re.I)
+        when = pub or when
         if title and "/decision-document/" in href:
             out.append((title, urljoin(BASE, href), when.group(1) if when else ""))
     return out

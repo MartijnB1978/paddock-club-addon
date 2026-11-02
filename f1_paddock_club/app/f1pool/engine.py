@@ -68,6 +68,7 @@ class Engine:
     def start(self):
         self.repair_partial_archive()
         self.fix_mexico_2026()
+        self.mexico_2026_use_fia()
         threading.Thread(target=self._run, daemon=True, name="engine").start()
 
     def fix_mexico_2026(self):
@@ -86,6 +87,18 @@ class Engine:
                               (ev["id"], "race_pos", slot, tla, "admin", db.iso(db.now_utc())))
             db.logmsg("info", "Mexico City Grand Prix 2026: race result corrected (admin): VER, HAM, ANT, LEC, NOR")
         db.set_setting("fix_mexico_2026_v133", "1")
+
+    def mexico_2026_use_fia(self):
+        """v1.5.1: the temporary admin correction of the Mexico 2026 race (press result, before the
+        stewards' post-race penalties) is removed, so the FIA Final Race Classification counts."""
+        if db.setting("mexico_2026_use_fia_v151"):
+            return
+        ev = db.q1("SELECT id FROM events WHERE year=2026 AND name='Mexico City Grand Prix'")
+        if ev:
+            db.ex("DELETE FROM results WHERE event_id=? AND field='race_pos' AND source='admin'", ev["id"])
+            db.ex("UPDATE fia_docs SET parsed=0 WHERE event_id=? AND kind='race_pos'", ev["id"])
+            db.logmsg("info", "Mexico City Grand Prix 2026: temporary admin result removed; FIA classification applies")
+        db.set_setting("mexico_2026_use_fia_v151", "1")
 
     def repair_partial_archive(self):
         """One-time repair (v1.3.2): sessions of the last day marked official from an incomplete archive
