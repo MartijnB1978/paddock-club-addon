@@ -290,7 +290,8 @@ def replace_driver(ev, out_tla, in_tla, in_name, permanent=False):
 
 def seed_perm_swaps():
     """One-off season changes pushed with an update (each runs once)."""
-    for year, out_tla, in_tla, in_name in [(2026, "OCO", "HIR", "Ryo Hirakawa")]:
+    for year, out_tla, in_tla, in_name in [(2026, "OCO", "HIR", "Ryo Hirakawa"),
+                                           (2026, "HIR", "CAM", "Rafael Câmara")]:
         key = f"perm_swap_{year}_{out_tla}_{in_tla}"
         if db.setting(key):
             continue

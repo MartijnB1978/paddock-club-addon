@@ -154,10 +154,11 @@ def init():
 def apply_driver_swaps(c, event_id):
     """Keep admin-entered driver replacements in force, even when F1's driver list is still the old one.
     Weekend-only swaps plus permanent ones (this round and every later round of the season)."""
+    # oldest first, so chains apply in order (OCO -> HIR, then HIR -> CAM)
     swaps = {sw["out_tla"]: sw for sw in c.execute(
         "SELECT p.out_tla, p.in_tla, p.in_name FROM perm_swaps p JOIN events e ON e.year=p.year "
-        "WHERE e.id=? AND e.round>=p.from_round", (event_id,)).fetchall()}
-    for sw in c.execute("SELECT * FROM driver_swaps WHERE event_id=?", (event_id,)).fetchall():
+        "WHERE e.id=? AND e.round>=p.from_round ORDER BY p.from_round, p.created_at", (event_id,)).fetchall()}
+    for sw in c.execute("SELECT * FROM driver_swaps WHERE event_id=? ORDER BY created_at", (event_id,)).fetchall():
         swaps[sw["out_tla"]] = sw
     for sw in swaps.values():
         has_in = c.execute("SELECT 1 FROM entrants WHERE event_id=? AND tla=?", (event_id, sw["in_tla"])).fetchone()
