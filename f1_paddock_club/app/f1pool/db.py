@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS entrants(
 CREATE TABLE IF NOT EXISTS driver_swaps(
   event_id INTEGER, out_tla TEXT, in_tla TEXT, in_name TEXT, created_at TEXT,
   PRIMARY KEY(event_id, out_tla));
+CREATE TABLE IF NOT EXISTS perm_swaps(
+  year INTEGER, from_round INTEGER, out_tla TEXT, in_tla TEXT, in_name TEXT, created_at TEXT,
+  PRIMARY KEY(year, out_tla));
 CREATE TABLE IF NOT EXISTS teams(
   year INTEGER, name TEXT, colour TEXT, logo_url TEXT, logo_checked TEXT,
   PRIMARY KEY(year, name));
@@ -149,14 +152,31 @@ def init():
 
 
 def apply_driver_swaps(c, event_id):
-    """Keep admin-entered driver replacements in force, even when F1's driver list is still the old one."""
+    """Keep admin-entered driver replacements in force, even when F1's driver list is still the old one.
+    Weekend-only swaps plus permanent ones (this round and every later round of the season)."""
+    swaps = {sw["out_tla"]: sw for sw in c.execute(
+        "SELECT p.out_tla, p.in_tla, p.in_name FROM perm_swaps p JOIN events e ON e.year=p.year "
+        "WHERE e.id=? AND e.round>=p.from_round", (event_id,)).fetchall()}
     for sw in c.execute("SELECT * FROM driver_swaps WHERE event_id=?", (event_id,)).fetchall():
+        swaps[sw["out_tla"]] = sw
+    for sw in swaps.values():
         has_in = c.execute("SELECT 1 FROM entrants WHERE event_id=? AND tla=?", (event_id, sw["in_tla"])).fetchone()
         if has_in:
             c.execute("DELETE FROM entrants WHERE event_id=? AND tla=?", (event_id, sw["out_tla"]))
         else:
             c.execute("UPDATE entrants SET tla=?, name=?, headshot='' WHERE event_id=? AND tla=?",
                       (sw["in_tla"], sw["in_name"], event_id, sw["out_tla"]))
+
+
+def copy_previous_entrants(c, ev):
+    """Start a weekend's driver list from the latest earlier weekend that has one, swaps applied."""
+    prev = c.execute("SELECT e.id FROM events e WHERE EXISTS(SELECT 1 FROM entrants x WHERE x.event_id=e.id) "
+                     "AND (e.year<? OR (e.year=? AND e.round<?)) ORDER BY e.year DESC, e.round DESC LIMIT 1",
+                     (ev["year"], ev["year"], ev["round"])).fetchone()
+    if prev:
+        c.execute("INSERT OR IGNORE INTO entrants SELECT ?, number, tla, name, team, colour, headshot "
+                  "FROM entrants WHERE event_id=?", (ev["id"], prev["id"]))
+        apply_driver_swaps(c, ev["id"])
 
 
 def setting(key, default=None):

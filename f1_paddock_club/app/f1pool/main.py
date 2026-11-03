@@ -81,6 +81,10 @@ def _startup():
     if os.environ.get("BASE_URL") and not db.setting("base_url"):
         db.set_setting("base_url", os.environ["BASE_URL"].rstrip("/"))
     bootstrap_admin()
+    try:
+        seed_perm_swaps()
+    except Exception:  # noqa: BLE001
+        log.exception("could not apply season driver changes")
     if os.environ.get("F1POOL_NO_ENGINE") != "1":
         engine.start()
 
@@ -227,6 +231,73 @@ def driver_map(year):
                   "ORDER BY e.round", year):
         out[r["tla"]] = dict(r)
     return out
+
+
+def replace_driver(ev, out_tla, in_tla, in_name, permanent=False):
+    """Put in_tla in place of out_tla for this weekend (or this and every later weekend of the season),
+    clear the outgoing driver's picks in parts that are still open, and e-mail those players."""
+    out = db.q1("SELECT name FROM entrants WHERE event_id=? AND tla=?", ev["id"], out_tla) \
+        or db.q1("SELECT x.name FROM entrants x JOIN events e ON e.id=x.event_id WHERE e.year=? AND x.tla=? "
+                 "ORDER BY e.round DESC LIMIT 1", ev["year"], out_tla)
+    out_name = out["name"] if out else out_tla
+    stamp = db.iso(db.now_utc())
+    with db.tx() as c:
+        if permanent:
+            c.execute("INSERT OR REPLACE INTO perm_swaps VALUES(?,?,?,?,?,?)",
+                      (ev["year"], ev["round"], out_tla, in_tla, in_name, stamp))
+            evs = c.execute("SELECT * FROM events WHERE year=? AND round>=? AND frozen=0 AND imported=0 "
+                            "AND cancelled=0 ORDER BY round", (ev["year"], ev["round"])).fetchall()
+        else:
+            c.execute("INSERT OR REPLACE INTO driver_swaps VALUES(?,?,?,?,?)",
+                      (ev["id"], out_tla, in_tla, in_name, stamp))
+            evs = [ev]
+        for e in evs:
+            if not c.execute("SELECT 1 FROM entrants WHERE event_id=?", (e["id"],)).fetchone():
+                db.copy_previous_entrants(c, e)
+            db.apply_driver_swaps(c, e["id"])
+    hit = defaultdict(list)     # user_id -> [(event, part label)]
+    for e in evs:
+        open_fields = [f for f in scoring.fields_for_event(e) if f != "fp" and not is_locked(e["id"], f)]
+        if not open_fields:
+            continue
+        ph = ",".join("?" * len(open_fields))
+        for r in db.q(f"SELECT DISTINCT user_id, field FROM predictions WHERE event_id=? AND value=? "
+                      f"AND field IN ({ph})", e["id"], out_tla, *open_fields):
+            hit[r["user_id"]].append((e, scoring.LABELS[r["field"]]))
+        db.ex(f"DELETE FROM predictions WHERE event_id=? AND value=? AND field IN ({ph})",
+              e["id"], out_tla, *open_fields)
+    when = "from now on" if permanent else f"at the {ev['name']}"
+    names, mailed = [], 0
+    for uid, parts in hit.items():
+        usr = db.q1("SELECT * FROM users WHERE id=?", uid)
+        if not usr:
+            continue
+        names.append(usr["name"])
+        lines = [f"{e['name']}: {lab}" if permanent else lab for e, lab in parts]
+        links = sorted({f"{mailer.base_url()}/predict/{e['id']}" for e, _ in parts})
+        if usr["active"] and usr["email"] and mailer.send(
+                usr["email"], f"{out_name} is out, please pick again",
+                f"Hi {usr['name']},\n\n{in_name} replaces {out_name} {when}. "
+                f"You had picked {out_name} for:\n- " + "\n- ".join(lines)
+                + "\n\nThat pick has been cleared. Please choose again before the deadline:\n"
+                + "\n".join(links) + "\n\nPaddock Club Reeuwijk"):
+            mailed += 1
+    db.logmsg("info", f"{in_name} ({in_tla}) replaces {out_name} ({out_tla}) {when}"
+                      f"{' (from ' + ev['name'] + ')' if permanent else ''}; "
+                      f"picks cleared for {', '.join(sorted(names)) or 'nobody'}")
+    return out_name, names, mailed
+
+
+def seed_perm_swaps():
+    """One-off season changes pushed with an update (each runs once)."""
+    for year, out_tla, in_tla, in_name in [(2026, "OCO", "HIR", "Ryo Hirakawa")]:
+        key = f"perm_swap_{year}_{out_tla}_{in_tla}"
+        if db.setting(key):
+            continue
+        ev = next_event(year)
+        if ev and ev["year"] == year:
+            replace_driver(ev, out_tla, in_tla, in_name, permanent=True)
+        db.set_setting(key, db.iso(db.now_utc()))
 
 
 def team_map(year):
@@ -959,6 +1030,7 @@ def admin_event(request: Request, event_id: int):
                   votes=db.q("SELECT * FROM dotd_votes WHERE event_id=? ORDER BY rank", event_id),
                   entries=None if ev["imported"] else entry_status(ev), year=ev["year"],
                   swaps=db.q("SELECT * FROM driver_swaps WHERE event_id=?", event_id),
+                  perm_swaps=db.q("SELECT * FROM perm_swaps WHERE year=? AND from_round<=?", ev["year"], ev["round"]),
                   season_drivers=sorted(driver_map(ev["year"]).values(), key=lambda d: d["name"]))
 
 
@@ -1021,45 +1093,17 @@ async def admin_event_save(request: Request, event_id: int):
         if not out_tla or len(in_tla) != 3 or not in_tla.isalpha() or not in_name or in_tla == out_tla:
             flash(request, "Choose the driver who is out, and enter the replacement's 3-letter code and name.", "err")
             return redirect(f"/admin/event/{event_id}")
-        out = db.q1("SELECT name FROM entrants WHERE event_id=? AND tla=?", event_id, out_tla)
-        out_name = out["name"] if out else out_tla
-        with db.tx() as c:
-            c.execute("INSERT OR REPLACE INTO driver_swaps VALUES(?,?,?,?,?)",
-                      (event_id, out_tla, in_tla, in_name, db.iso(db.now_utc())))
-            db.apply_driver_swaps(c, event_id)
-        # clear picks of the outgoing driver in parts that are still open, and tell those players
-        open_fields = [f for f in scoring.fields_for_event(ev) if f != "fp" and not is_locked(event_id, f)]
-        hit = defaultdict(list)
-        if open_fields:
-            ph = ",".join("?" * len(open_fields))
-            for r in db.q(f"SELECT DISTINCT user_id, field FROM predictions WHERE event_id=? AND value=? "
-                          f"AND field IN ({ph})", event_id, out_tla, *open_fields):
-                hit[r["user_id"]].append(scoring.LABELS[r["field"]])
-            db.ex(f"DELETE FROM predictions WHERE event_id=? AND value=? AND field IN ({ph})",
-                  event_id, out_tla, *open_fields)
-        link = f"{mailer.base_url()}/predict/{event_id}"
-        names, mailed = [], 0
-        for uid, parts in hit.items():
-            usr = db.q1("SELECT * FROM users WHERE id=?", uid)
-            if not usr:
-                continue
-            names.append(usr["name"])
-            if usr["active"] and usr["email"] and mailer.send(
-                    usr["email"], f"{ev['name']}: {out_name} is out, please pick again",
-                    f"Hi {usr['name']},\n\n{in_name} replaces {out_name} at the {ev['name']}. "
-                    f"You had picked {out_name} for:\n- " + "\n- ".join(parts)
-                    + f"\n\nThat pick has been cleared. Please choose again before the deadline:\n{link}"
-                    "\n\nPaddock Club Reeuwijk"):
-                mailed += 1
-        db.logmsg("info", f"{ev['name']}: {in_name} ({in_tla}) replaces {out_name} ({out_tla}); "
-                          f"picks cleared for {', '.join(sorted(names)) or 'nobody'}")
-        flash(request, f"{in_name} replaces {out_name}. "
+        permanent = form.get("permanent") == "1"
+        out_name, names, mailed = replace_driver(ev, out_tla, in_tla, in_name, permanent)
+        flash(request, f"{in_name} replaces {out_name}" + (" for the rest of the season. " if permanent else ". ")
                        + (f"Picks cleared for {', '.join(sorted(names))}; {mailed} e-mailed." if names
                           else "Nobody had picked them in an open part."))
     elif action == "unswap":
+        out_tla = (form.get("out_tla") or "").upper()
         with db.tx() as c:
-            c.execute("DELETE FROM driver_swaps WHERE event_id=? AND out_tla=?",
-                      (event_id, (form.get("out_tla") or "").upper()))
+            c.execute("DELETE FROM driver_swaps WHERE event_id=? AND out_tla=?", (event_id, out_tla))
+            if form.get("permanent") == "1":
+                c.execute("DELETE FROM perm_swaps WHERE year=? AND out_tla=?", (ev["year"], out_tla))
         engine.force("entrants")
         flash(request, "Replacement removed; the driver list is reloaded from F1 shortly.")
     elif action == "refetch":

@@ -347,12 +347,8 @@ class Engine:
         self.bump()
 
     def copy_previous_entrants(self, ev):
-        prev = db.q1("SELECT e.id FROM events e WHERE EXISTS(SELECT 1 FROM entrants x WHERE x.event_id=e.id) "
-                     "AND (e.year<? OR (e.year=? AND e.round<?)) ORDER BY e.year DESC, e.round DESC LIMIT 1",
-                     ev["year"], ev["year"], ev["round"])
-        if prev:
-            db.ex("INSERT OR IGNORE INTO entrants SELECT ?, number, tla, name, team, colour, headshot "
-                  "FROM entrants WHERE event_id=?", ev["id"], prev["id"])
+        with db.tx() as c:
+            db.copy_previous_entrants(c, ev)
 
     # ------------------------------------------------------------ logos
     def resolve_logos(self, year):
