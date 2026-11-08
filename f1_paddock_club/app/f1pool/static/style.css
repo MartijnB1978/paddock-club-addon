@@ -358,3 +358,10 @@ section + section{margin-top:28px}
 .rc.fia a:hover{text-decoration:underline}
 .trackcard .note{font-size:.75rem;margin:6px 0 0}
 .trackcard .note a{color:var(--muted)}
+
+/* chat notifications */
+.push{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:10px}
+.push-on{color:var(--green);font-weight:600}
+.push-note{color:var(--muted);font-size:.9rem}
+.push-msg{color:var(--amber);font-size:.9rem}
+.push-msg:empty{display:none}

@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, bump, chat, db, dotd, fia, track, weather, importer, mailer, reports, scoring, standings
+from . import auth, bump, chat, db, push, dotd, fia, track, weather, importer, mailer, reports, scoring, standings
 from .engine import Engine
 from .livetiming import car_positions as lt_positions
 from .schedule import DURATION, SCORED
@@ -31,6 +31,7 @@ HERE = Path(__file__).parent
 db.init()
 bump.init()
 chat.init()
+push.init()
 fia.init()
 _secret_file = DATA_DIR / "secret.key"
 if not _secret_file.exists():
@@ -127,7 +128,7 @@ templates.env.filters["chattext"] = lambda t: Markup(chat.render_text(t))
 templates.env.globals["wx_get"] = lambda eid: weather.get(eid)
 templates.env.globals["LABELS"] = scoring.LABELS
 # cache-busting: changes whenever the static files change, so browsers never use a stale stylesheet
-templates.env.globals["ASSET_V"] = int(max((HERE / "static" / f).stat().st_mtime for f in ("style.css", "app.js")))
+templates.env.globals["ASSET_V"] = int(max((HERE / "static" / f).stat().st_mtime for f in ("style.css", "app.js", "push.js")))
 
 
 def current_user(request):
@@ -543,6 +544,7 @@ def chat_page(request: Request):
     rows = chat.messages()
     if rows:
         chat.mark_seen(user["id"], rows[-1]["id"])
+    push.mark_active(user["id"])
     resp = render(request, "chat.html", rows=rows, chat_unread=0, now=db.iso(db.now_utc()),
                   edit_until=chat.edit_until)
     resp.headers["Cache-Control"] = "no-store"
@@ -556,6 +558,8 @@ def chat_messages(request: Request, after: int = 0, before: int = 0, since: str 
     rows = chat.messages(before=before, limit=40) if before else chat.messages(after=after)
     if rows and not before:
         chat.mark_seen(user["id"], rows[-1]["id"])
+    if not before:
+        push.mark_active(user["id"])          # the page only polls while it is on screen
     out = {"messages": _chat_json(rows, user), "more": bool(before) and len(rows) == 40, "now": now,
            "visible": db.q1("SELECT COUNT(*) n FROM chat_messages WHERE deleted=0")["n"]}
     if since and not before:
@@ -589,9 +593,10 @@ async def chat_send(request: Request):
         up = form.get("file")
         if up is not None and getattr(up, "filename", ""):
             media_id = await asyncio.to_thread(chat.save_upload, up.file, up.filename)
-        chat.post(user["id"], form.get("text") or "", media_id)
+        msg_id = chat.post(user["id"], form.get("text") or "", media_id)
     except chat.ChatError as exc:
         return JSONResponse({"ok": False, "msg": str(exc)}, status_code=400)
+    push.notify_chat(msg_id)
     return JSONResponse({"ok": True})
 
 
@@ -611,6 +616,70 @@ def chat_media(request: Request, media_id: int):
     if not m:
         return HTMLResponse("Not found", status_code=404)
     return FileResponse(m["path"], media_type=m["mime"], headers={"Cache-Control": "private, max-age=604800"})
+
+
+# ------------------------------------------------------------------ notifications (web push)
+@app.get("/sw.js")
+def service_worker():
+    # served from the root so it may handle the whole site (needed for notification clicks)
+    return FileResponse(HERE / "static" / "sw.js", media_type="text/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return JSONResponse({
+        "name": "Paddock Club Reeuwijk", "short_name": "Paddock Club", "start_url": "/chat", "scope": "/",
+        "display": "standalone", "background_color": "#141821", "theme_color": "#141821",
+        "icons": [{"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                  {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+                  {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]},
+        media_type="application/manifest+json")
+
+
+@app.get("/push/key")
+def push_key(request: Request):
+    user = require_user(request)
+    return JSONResponse({"key": push.public_key(), "devices": push.devices(user["id"])})
+
+
+async def _push_form(request):
+    user = require_user(request)
+    form = await request.form()
+    if not auth.csrf_ok(request.session, form.get("csrf")):
+        return user, None
+    return user, form
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request):
+    user, form = await _push_form(request)
+    if form is None:
+        return JSONResponse({"ok": False, "msg": "Session expired, reload the page."}, status_code=403)
+    try:
+        push.subscribe(user["id"], json.loads(form.get("sub") or "{}"), request.headers.get("user-agent", ""))
+    except (ValueError, TypeError):
+        return JSONResponse({"ok": False, "msg": "This browser sent an invalid subscription."}, status_code=400)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/push/unsubscribe")
+async def push_unsubscribe(request: Request):
+    user, form = await _push_form(request)
+    if form is None:
+        return JSONResponse({"ok": False}, status_code=403)
+    push.unsubscribe(user["id"], form.get("endpoint"))
+    return JSONResponse({"ok": True})
+
+
+@app.post("/push/test")
+async def push_test(request: Request):
+    user, form = await _push_form(request)
+    if form is None:
+        return JSONResponse({"ok": False, "msg": "Session expired, reload the page."}, status_code=403)
+    ok, total = await asyncio.to_thread(push.test, user["id"])
+    return JSONResponse({"ok": ok > 0, "msg": f"Test sent to {ok} of {total} device(s)." if total
+                         else "No devices with notifications on yet."})
 
 
 @app.get("/rules", response_class=HTMLResponse)

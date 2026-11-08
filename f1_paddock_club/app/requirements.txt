@@ -13,3 +13,4 @@ weasyprint==62.3
 pydyf==0.10.0
 brotli
 pypdf==5.1.0
+pywebpush==2.5.0
