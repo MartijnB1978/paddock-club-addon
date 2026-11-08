@@ -54,6 +54,16 @@
   </ol>
 </section>
 
+{% if pg %}
+<section class="livegrid" aria-label="Published predictions for {{ pg.ev.name }}">
+  <header class="panel-head">
+    <div><h2><a href="/race/{{ pg.ev.id }}">{{ pg.ev.name }}</a>: predictions so far</h2>
+      <p class="muted">{{ pg.parts|join(', ') }}: deadline passed, everyone's picks are public.{% if pg.hidden %} {{ pg.hidden|join(', ') }} stay hidden until the race starts.{% endif %}</p></div>
+    <span class="badge">Locked</span>
+  </header>
+  {{ pred_grid(pg.rows, pg.fields, pg.visible, user, drivers, teams) }}
+</section>
+{% endif %}
 {% if bcr %}{{ bumpchart(bcr) }}{% endif %}
 {% if bc %}{{ bumpchart(bc) }}{% endif %}
 {% if lg %}

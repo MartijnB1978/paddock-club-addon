@@ -424,6 +424,33 @@ def live_grid():
     return {"session": s, "ev": ev, "rows": rows, "fields": fields, "visible": visible, "is_live": is_live}
 
 
+def published_grid():
+    """Picks for this weekend that are already public (deadline passed) while the race is still to come.
+    Disappears when the race starts: from then on every pick is open and the live grid takes over."""
+    now = db.iso(db.now_utc())
+    ev = db.q1("SELECT e.* FROM events e JOIN sessions s ON s.event_id=e.id AND s.kind='R' "
+               "WHERE e.cancelled=0 AND e.imported=0 AND s.start_utc>? ORDER BY s.start_utc LIMIT 1", now)
+    if not ev:
+        return None
+    _, rows, fields, visible = event_grid(ev, only_locked=True)
+    if not fields:
+        return None
+    rows.sort(key=lambda r: (-(r["total"] - r["pen"]), r["user"]["name"].lower()))
+    hidden = [scoring.LABELS[f] for f in scoring.fields_for_event(ev) if f not in fields]
+    return {"ev": ev, "rows": rows, "fields": fields, "visible": visible,
+            "parts": [scoring.LABELS[f] for f in fields], "hidden": hidden}
+
+
+def board_grids(user):
+    """(published picks, live grid) for the standings page; no double table for the same session."""
+    if not user:
+        return None, None
+    pg, lg = published_grid(), live_grid()
+    if pg and lg and lg["ev"]["id"] == pg["ev"]["id"]:
+        lg = None                       # before the race the published table already holds these picks
+    return pg, lg
+
+
 # ------------------------------------------------------------------ public
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, year: int | None = None):
@@ -433,7 +460,7 @@ def home(request: Request, year: int | None = None):
     return render(request, "home.html", year=year, board=board, events=events, live_ev=live_ev,
                   bc=bump.chart(year, (current_user(request) or {"id": None})["id"]),
                   bcr=bump.chart(year, (current_user(request) or {"id": None})["id"], mode="race"),
-                  panel=live_panel(), lg=live_grid() if current_user(request) else None, deadlines=dl, nxt=dl[0] if dl else None, drivers=driver_map(year),
+                  panel=live_panel(), **dict(zip(("pg", "lg"), board_grids(current_user(request)))), deadlines=dl, nxt=dl[0] if dl else None, drivers=driver_map(year),
                   teams=team_map(year), years=[r["year"] for r in db.q(
                       "SELECT DISTINCT year FROM events ORDER BY year DESC")])
 
@@ -465,7 +492,7 @@ def board_fragment(request: Request, year: int | None = None):
         "request": request, "board": board, "live_ev": live_ev, "panel": live_panel(),
         "bc": bump.chart(year, (current_user(request) or {"id": None})["id"]),
         "bcr": bump.chart(year, (current_user(request) or {"id": None})["id"], mode="race"),
-        "user": current_user(request), "lg": live_grid() if current_user(request) else None,
+        "user": current_user(request), **dict(zip(("pg", "lg"), board_grids(current_user(request)))),
         "nxt": (upcoming_deadlines(1) or [None])[0],
         "drivers": driver_map(year), "teams": team_map(year), "events": events})
 
