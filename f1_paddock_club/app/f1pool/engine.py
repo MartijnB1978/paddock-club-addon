@@ -186,6 +186,8 @@ class Engine:
             self.dotd_snapshot(now)
         if self.due("dotd", 600):
             self.dotd_poll(now)
+        if self.due("dhl_pitstop", 900):
+            self.pitstop_poll(now)
         if self.due("reminders", 60):
             self.send_reminders(now)
 
@@ -297,7 +299,7 @@ class Engine:
             key = f"dotd_seen_{s['event_id']}"
             if db.setting(key) is None:
                 try:
-                    db.set_setting(key, "\n".join(link for _t, link in dotd.feed_articles()))
+                    db.set_setting(key, "\n".join(link for _t, link in dotd.all_articles()))
                 except Exception as exc:  # noqa: BLE001
                     log.info("dotd snapshot failed: %s", exc)
 
@@ -312,9 +314,11 @@ class Engine:
             ents = db.q("SELECT * FROM entrants WHERE event_id=?", ev["id"])
             seen = set((db.setting(f"dotd_seen_{ev['id']}") or "").split("\n")) - {""}
             try:
-                found = dotd.find_for_race(ents, seen)
+                found = dotd.find_for_race(ents, seen, ev)
             except Exception as exc:  # noqa: BLE001
                 log.info("dotd lookup failed: %s", exc)
+                if self.due(f"dotd_err_{ev['id']}", 3600):
+                    db.logmsg("warning", f"Driver of the Day lookup for {ev['name']} failed: {exc}")
                 found = None
             if found:
                 self.save_dotd(ev, found)
@@ -328,6 +332,53 @@ class Engine:
                                      "F1 hasn't published the Driver of the Day article yet (or the app couldn't "
                                      "read it). Please enter it on the admin page, or paste the article link "
                                      f"there:\n\n{mailer.base_url()}/admin/event/{ev['id']}")
+
+    # ------------------------------------------------------------ DHL fastest pit stop
+    def pitstop_poll(self, now):
+        """Take the fastest pit stop (team) from F1's DHL award table once it lists this race. It replaces
+        the live-timing estimate (source 'official'); admin corrections keep priority."""
+        rows = db.q("SELECT e.*, s.start_utc AS race_start FROM events e JOIN sessions s ON s.event_id=e.id "
+                    "AND s.kind='R' WHERE e.imported=0 AND e.cancelled=0 AND e.frozen=0 "
+                    "AND s.start_utc BETWEEN ? AND ?",
+                    db.iso(now - timedelta(hours=50)), db.iso(now - timedelta(minutes=90)))
+        for ev in rows:
+            if db.setting(f"dhl_fp_{ev['id']}"):
+                continue
+            cur = db.q1("SELECT value, source FROM results WHERE event_id=? AND field='fp' AND slot=1", ev["id"])
+            year_events = db.q("SELECT * FROM events WHERE year=? AND cancelled=0", ev["year"])
+            teams = sorted({r["team"] for r in db.q("SELECT team FROM entrants WHERE event_id=?", ev["id"])
+                            if r["team"]})
+            try:
+                got = dotd.fastest_pitstop(ev, year_events, teams)
+            except Exception as exc:  # noqa: BLE001
+                if self.due(f"dhl_err_{ev['id']}", 3600):
+                    db.logmsg("warning", f"DHL fastest pit stop check for {ev['name']} failed: {exc}")
+                continue
+            if not got:
+                race_end = db.parse_iso(ev["race_start"]) + timedelta(minutes=DURATION["R"])
+                if now > race_end + timedelta(hours=24) and self.due(f"dhl_wait_{ev['id']}", 6 * 3600):
+                    db.logmsg("info", f"DHL fastest pit stop table doesn't list {ev['name']} yet"
+                                      + (f"; keeping {cur['value']} ({cur['source']})" if cur else ""))
+                continue
+            team, secs = got
+            db.set_setting(f"dhl_fp_{ev['id']}", f"{team}|{secs}")
+            when = f" ({secs:.2f}s)" if secs else ""
+            if cur and cur["source"] == "admin":
+                if cur["value"] != team:
+                    db.logmsg("warning", f"{ev['name']}: DHL fastest pit stop is {team}{when}, admin entered "
+                                         f"{cur['value']}; admin entry kept")
+                    mailer.notify_admins(f"{ev['name']}: fastest pit stop differs from DHL",
+                                         f"F1's DHL award gives the fastest pit stop to {team}{when}, but the "
+                                         f"admin page says {cur['value']}. The admin entry is kept; change it "
+                                         f"if needed:\n\n{mailer.base_url()}/admin/event/{ev['id']}")
+                continue
+            self.write_results(ev["id"], {"fp": {1: team}}, "official")
+            if cur and cur["value"] != team:
+                db.logmsg("warning", f"{ev['name']}: fastest pit stop corrected from {cur['value']} (live timing) "
+                                     f"to {team}{when} (DHL award)")
+            else:
+                db.logmsg("info", f"{ev['name']}: fastest pit stop confirmed by DHL award: {team}{when}")
+            self.bump()
 
     def save_dotd(self, ev, found):
         votes = found["votes"]
