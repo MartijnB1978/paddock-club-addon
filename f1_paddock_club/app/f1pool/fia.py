@@ -74,10 +74,50 @@ def season_path(year):
     return m.group(1)
 
 
+def _norm(s):
+    return re.sub(r"[^a-z0-9]+", " ", _plain(s).lower()).strip()
+
+
+def fia_event_names(year):
+    """Event names exactly as the FIA spells them (accents included), from the season page."""
+    html = _get(f"{CHAMP}/{season_path(year)}").text
+    names = {html_unescape(n).strip() for n in re.findall(r">\s*([^<>]{3,80}?Grand Prix)\s*<", html)}
+    return sorted(names)
+
+
+def html_unescape(s):
+    import html as _html
+    return _html.unescape(s)
+
+
+def event_name(ev):
+    """FIA's own name for this weekend (e.g. 'São Paulo Grand Prix'), matched accent- and case-
+    insensitively against the season page and cached per event. Falls back to our name as-is."""
+    key = f"fia_event:{ev['year']}:{ev['id']}"
+    hit = db.setting(key)
+    if hit:
+        return hit
+    ours = _norm(ev["name"])
+    names = fia_event_names(ev["year"])
+    match = next((n for n in names if _norm(n) == ours), None)
+    if not match:                                   # e.g. 'Brazilian GP' vs 'São Paulo Grand Prix': best word overlap
+        words = set(ours.split()) - {"grand", "prix", "gp"}
+        scored = sorted(((len(words & set(_norm(n).split())), n) for n in names), reverse=True)
+        match = scored[0][1] if scored and scored[0][0] else None
+    if not match:
+        raise ValueError(f"'{ev['name']}' not in the FIA {ev['year']} event list ({', '.join(names) or 'empty'})")
+    db.set_setting(key, match)
+    return match
+
+
 def list_docs(ev):
     """[(title, url, published)] newest first, from the event's FIA documents page."""
-    url = f"{CHAMP}/{season_path(ev['year'])}/event/{quote(_plain(ev['name']))}"
-    html = _get(url).text
+    url = f"{CHAMP}/{season_path(ev['year'])}/event/{quote(event_name(ev))}"
+    try:
+        html = _get(url).text
+    except requests.HTTPError:
+        db.set_setting(f"fia_event:{ev['year']}:{ev['id']}", "")     # wrong name: look it up again next time
+        raise
     out = []
     # each document is an <a href="...pdf"> with the title inside; the published time follows nearby
     for m in re.finditer(r'href="([^"]+?\.pdf)"[^>]*>(.*?)</a>(?=(.{0,400}))', html, re.S | re.I):
