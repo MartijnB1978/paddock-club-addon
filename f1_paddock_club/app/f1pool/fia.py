@@ -42,6 +42,10 @@ LABEL = {"race_pos": "P", "sprint_pos": "Sprint P", "pole": "Pole", "sprint_pole
 STEWARD_RE = re.compile(r"^(infringe?ment|decision|summons|offence|reprimand|penalty|stewards)", re.I)
 
 
+class EventNotListed(ValueError):
+    """The FIA adds a weekend to its season page only when the first document for it is published."""
+
+
 def init():
     db.conn().executescript(SCHEMA)
     for d in db.q("SELECT rowid, title, published FROM fia_docs WHERE title LIKE '%Published on%'"):
@@ -105,7 +109,7 @@ def event_name(ev):
         scored = sorted(((len(words & set(_norm(n).split())), n) for n in names), reverse=True)
         match = scored[0][1] if scored and scored[0][0] else None
     if not match:
-        raise ValueError(f"'{ev['name']}' not in the FIA {ev['year']} event list ({', '.join(names) or 'empty'})")
+        raise EventNotListed(f"'{ev['name']}' not in the FIA {ev['year']} event list ({', '.join(names) or 'empty'})")
     db.set_setting(key, match)
     return match
 
@@ -214,6 +218,12 @@ def check(engine, now):
     for ev in evs:
         try:
             docs = list_docs(ev)
+        except EventNotListed as exc:
+            if ev["first_utc"] > db.iso(now):       # too early for FIA documents: try again next round
+                continue
+            if engine.due(f"fia_err:{ev['id']}", 6 * 3600):
+                db.logmsg("warning", f"FIA documents for {ev['name']} not reachable: {exc}")
+            continue
         except (requests.RequestException, ValueError) as exc:
             if engine.due(f"fia_err:{ev['id']}", 6 * 3600):
                 db.logmsg("warning", f"FIA documents for {ev['name']} not reachable: {exc}")

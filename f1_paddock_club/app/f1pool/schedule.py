@@ -25,6 +25,10 @@ SCORED = ("SQ", "S", "Q", "R")
 DURATION = {"FP1": 70, "FP2": 70, "FP3": 70, "SQ": 50, "Q": 70, "S": 70, "R": 150}
 
 
+class NoCalendarData(RuntimeError):
+    """Neither calendar source has this season (normal for next year until the files are published)."""
+
+
 def _offset(s):
     if not s:
         return timedelta(0)
@@ -181,7 +185,7 @@ def sync(year, http):
     index = http.index(year) if http else None
     events = apply_index(events, index)
     if not events:
-        raise RuntimeError("No calendar data available")
+        raise NoCalendarData("No calendar data available")
     changes = save(year, events)
     db.set_setting(f"schedule_sync_{year}", json.dumps({"at": db.iso(db.now_utc()),
                                                          "official_index": bool(index),

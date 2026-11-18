@@ -10,7 +10,7 @@ import requests
 
 from . import bump, chat, db, dotd, fia, livetiming as lt, official, scoring, mailer, track, weather
 from .f1auth import TokenManager
-from .schedule import DURATION, SCORED, sync as sync_schedule
+from .schedule import DURATION, SCORED, NoCalendarData, sync as sync_schedule
 
 log = logging.getLogger("engine")
 
@@ -140,6 +140,9 @@ class Engine:
                 try:
                     if sync_schedule(y, self.http):
                         self.bump()
+                except NoCalendarData as exc:
+                    if y == year:           # next season not being published yet is normal: keep trying quietly
+                        db.logmsg("warning", f"Calendar sync {y} failed: {exc}")
                 except Exception as exc:  # noqa: BLE001
                     db.logmsg("warning", f"Calendar sync {y} failed: {exc}")
         if self.due("entrants", 1800):
