@@ -73,4 +73,10 @@
     {% endif %}
 </section>
 {% endif %}
+{% if user and panel and panel.is_live and panel.session.kind in ('R', 'S') %}
+<section class="panel doomcard" aria-label="Circle of Doom">
+  <header class="panel-head"><div><h2>Circle of Doom</h2><p class="muted">Gaps to the leader on a one-lap clock. Tap a driver to see where a pit stop now puts him.</p></div></header>
+  <div id="doom-slot"></div>
+</section>
+{% endif %}
 </div>

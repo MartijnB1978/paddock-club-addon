@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import secrets
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,9 +17,9 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, bump, chat, db, push, dotd, fia, track, weather, importer, mailer, reports, scoring, standings
+from . import auth, bump, chat, circle, db, push, dotd, fia, track, weather, importer, mailer, reports, scoring, standings
 from .engine import Engine
-from .livetiming import car_positions as lt_positions
+from .livetiming import car_positions as lt_positions, driver_info as lt_drivers
 from .schedule import DURATION, SCORED
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -534,6 +535,34 @@ def live_map(have: str = ""):
     out = {"live": True, "key": draw["key"], "cars": cars}
     if have != draw["key"]:
         out["track"] = {"viewBox": draw["viewBox"], "path": draw["path"], "dots": draw["dots"]}
+    return JSONResponse(out)
+
+
+_circle_cache = {"at": 0.0, "sid": None, "out": None}
+
+
+@app.get("/live/circle")
+def live_circle(request: Request):
+    """Circle of Doom data (members only): every car by its gap to the leader, with pit loss figures."""
+    if not current_user(request):
+        return JSONResponse({"live": False, "login": True}, status_code=401)
+    live, sid = engine.live, engine.live_session
+    s = db.q1("SELECT kind, event_id FROM sessions WHERE id=?", sid) if sid else None
+    if not live or not s or s["kind"] not in ("R", "S"):
+        return JSONResponse({"live": False})
+    now = time.time()
+    if _circle_cache["sid"] == sid and now - _circle_cache["at"] < 1.5:
+        return JSONResponse(_circle_cache["out"])
+    with live.state.lock:
+        data = json.loads(json.dumps({k: live.state.data.get(k) for k in
+                                      ("TimingData", "TimingAppData", "DriverList", "SessionInfo")}))
+    info = {str(e["number"]): {"tla": e["tla"], "colour": e["colour"]}
+            for e in db.q("SELECT number, tla, colour FROM entrants WHERE event_id=?", s["event_id"])}
+    for num, d in lt_drivers(data).items():
+        info[num] = {"tla": d["tla"], "colour": d["colour"] or (info.get(num) or {}).get("colour")}
+    out = circle.build(data, info, (engine.live_flag or {}).get("kind"))
+    out["live"] = True
+    _circle_cache.update(at=now, sid=sid, out=out)
     return JSONResponse(out)
 
 
