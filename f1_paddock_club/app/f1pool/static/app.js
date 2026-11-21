@@ -266,8 +266,7 @@
       if (lbusy) return; lbusy = true;
       fetch(livebox.dataset.url, {cache: "no-store"}).then(function (r) { return r.text(); }).then(function (html) {
         if (map && map.parentNode) map.parentNode.removeChild(map);
-        if (doom && doom.parentNode) doom.parentNode.removeChild(doom);
-        livebox.innerHTML = html; if (window.pcClockTick) window.pcClockTick(); mountMap(); mountDoom();
+        livebox.innerHTML = html; if (window.pcClockTick) window.pcClockTick(); mountMap();
       }).finally(function () { lbusy = false; });
     };
   }
@@ -359,6 +358,7 @@
     if (!doom) {
       doom = document.createElement("div");
       doom.className = "doom";
+      doom.hidden = true;
       doom.innerHTML = '<svg viewBox="-215 -215 430 430" role="img" aria-label="Circle of Doom: cars placed by time gap to the leader">' +
         '<circle class="ring" r="' + R + '"></circle><line class="start" x1="0" y1="' + (-R - 12) + '" x2="0" y2="' + (-R + 12) + '"></line>' +
         '<g class="win"></g><g class="cars"></g><g class="mid"></g></svg>' +
@@ -384,6 +384,9 @@
     fetch("/live/circle", {cache: "no-store", credentials: "same-origin"})
       .then(function (r) { return r.json(); })
       .then(function (d) {
+        var wait = document.querySelector(".doom-wait");
+        if (wait) wait.hidden = !!d.live;
+        doom.hidden = !d.live;
         if (!d.live) return;
         if (doomData && doomData.mode !== d.mode) doomMode = null;   // track status changed: follow it again
         doomData = d; drawDoom();

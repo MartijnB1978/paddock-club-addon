@@ -366,7 +366,7 @@ section + section{margin-top:28px}
 .push-msg{color:var(--amber);font-size:.9rem}
 .push-msg:empty{display:none}
 /* Circle of Doom */
-.doomcard{grid-column:1/-1}
+.doom[hidden]{display:none}
 .doom{display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr);grid-template-rows:auto auto auto 1fr;gap:8px 24px;align-items:start}
 .doom svg{grid-row:1/span 4;display:block;width:100%;height:auto;max-width:440px;margin:0 auto;font-family:var(--display)}
 .doom .ring{fill:none;stroke:#2c3445;stroke-width:14}

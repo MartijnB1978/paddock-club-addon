@@ -538,6 +538,19 @@ def live_map(have: str = ""):
     return JSONResponse(out)
 
 
+@app.get("/doom", response_class=HTMLResponse)
+def doom_page(request: Request):
+    """Circle of Doom tab (members only); the browser fetches the live data from /live/circle."""
+    require_user(request)
+    sid = engine.live_session
+    race = db.q1("SELECT s.*, e.name AS ev_name FROM sessions s JOIN events e ON e.id=s.event_id "
+                 "WHERE s.id=? AND s.kind IN ('R','S')", sid) if sid else None
+    race = race or db.q1("SELECT s.*, e.name AS ev_name FROM sessions s JOIN events e ON e.id=s.event_id "
+                         "WHERE e.cancelled=0 AND s.kind IN ('R','S') AND s.start_utc>=? "
+                         "ORDER BY s.start_utc LIMIT 1", db.iso(db.now_utc() - timedelta(hours=3)))
+    return render(request, "doom.html", race=race, deadlines=upcoming_deadlines())
+
+
 _circle_cache = {"at": 0.0, "sid": None, "out": None}
 
 
