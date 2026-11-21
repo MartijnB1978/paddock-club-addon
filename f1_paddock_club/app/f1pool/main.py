@@ -11,13 +11,13 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, bump, chat, circle, db, push, dotd, fia, track, weather, importer, mailer, reports, scoring, standings
+from . import auth, bump, chat, circle, db, replay, push, dotd, fia, track, weather, importer, mailer, reports, scoring, standings
 from .engine import Engine
 from .livetiming import car_positions as lt_positions, driver_info as lt_drivers
 from .schedule import DURATION, SCORED
@@ -548,7 +548,22 @@ def doom_page(request: Request):
     race = race or db.q1("SELECT s.*, e.name AS ev_name FROM sessions s JOIN events e ON e.id=s.event_id "
                          "WHERE e.cancelled=0 AND s.kind IN ('R','S') AND s.start_utc>=? "
                          "ORDER BY s.start_utc LIMIT 1", db.iso(db.now_utc() - timedelta(hours=3)))
-    return render(request, "doom.html", race=race, deadlines=upcoming_deadlines())
+    return render(request, "doom.html", race=race, deadlines=upcoming_deadlines(),
+                  replays=replay.sessions(default_year()))
+
+
+@app.get("/replay/{sid}")
+def replay_data(request: Request, sid: int):
+    """Circle of Doom replay of an earlier race or sprint (members only), built on first request."""
+    if not current_user(request):
+        return JSONResponse({"status": "login"}, status_code=401)
+    if not any(r["id"] == sid for r in replay.sessions(default_year())):
+        return JSONResponse({"status": "error", "msg": "Not a race or sprint of this season with timing data."})
+    state, body = replay.get(engine.http, DATA_DIR, sid)
+    if state == "ready":
+        return Response(body, media_type="application/json",
+                        headers={"Content-Encoding": "gzip", "Cache-Control": "private, max-age=86400"})
+    return JSONResponse({"status": state, "msg": body or ""})
 
 
 _circle_cache = {"at": 0.0, "sid": None, "out": None}
