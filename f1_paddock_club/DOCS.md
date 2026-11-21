@@ -62,4 +62,6 @@ Paste the key in the add-on option `tailscale_authkey`. After the first start th
 - Live and final results: livetiming.formula1.com, the official F1 timing feed.
 - Driver of the Day (with the fan-vote split) is read automatically from F1's Driver of the Day article on formula1.com. If it isn't found within 6 hours you get an e-mail, and you can paste the article link on the weekend's admin page. A weekend freezes 48 hours after the race once Driver of the Day is set (at the latest after 7 days).
 
+- Circle of Doom (own tab, live during races and sprints, logged-in players only): every car placed by its time gap to the leader, one lap per turn, built from the same live timing feed. Tap a driver to see where a pit stop now would put him. Pit loss is a typical figure per circuit (VSC 65 %, Safety Car 50 % of it) and can be nudged with − and + in the browser.
+
 Data is stored in `/data/f1pool.sqlite3`, which is included in Home Assistant backups.

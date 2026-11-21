@@ -365,3 +365,46 @@ section + section{margin-top:28px}
 .push-note{color:var(--muted);font-size:.9rem}
 .push-msg{color:var(--amber);font-size:.9rem}
 .push-msg:empty{display:none}
+/* Circle of Doom */
+.doom[hidden]{display:none}
+.doom{display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr);grid-template-rows:auto auto auto 1fr;gap:8px 24px;align-items:start}
+.doom svg{grid-row:1/span 4;display:block;width:100%;height:auto;max-width:440px;margin:0 auto;font-family:var(--display)}
+.doom .ring{fill:none;stroke:#2c3445;stroke-width:14}
+.doom .start{stroke:var(--text);stroke-width:2}
+.doom .arc{fill:none;stroke-width:14;stroke-opacity:.45;stroke-linecap:round}
+.doom .band{fill:none;stroke:var(--amber);stroke-width:20;stroke-opacity:.25}
+.doom .ghost circle{fill:none;stroke-width:3;stroke-dasharray:4 3}
+.doom g.car{cursor:pointer;transition:transform 1.8s linear}
+.doom g.car .hit{fill:transparent}
+.doom g.car .dot{stroke:#141821;stroke-width:2}
+.doom g.car .lead{stroke:#4a5568;stroke-width:1}
+.doom g.car .lbl{fill:var(--text);font-weight:700;font-size:17px;text-anchor:middle;paint-order:stroke;stroke:#141821;stroke-width:4px}
+.doom g.car.pit .dot{stroke:#ff4fd8;stroke-width:5}
+.doom g.car.pit .lbl{fill:#ff4fd8}
+.doom g.car.sel .dot{stroke:#fff;stroke-width:3}
+.doom g.car.hitby .dot{stroke:var(--red);stroke-width:4}
+.doom g.car.hitby .lbl{fill:var(--red)}
+.doom g.car.dim{opacity:.35}
+.doom g.car:focus-visible{outline:none}
+.doom g.car:focus-visible .dot{stroke:var(--amber);stroke-width:4}
+.doom .mid text{text-anchor:middle;fill:var(--text)}
+.doom .mid .big{font-size:40px;font-weight:700}
+.doom .mid .big2{font-size:28px;font-weight:700}
+.doom .mid .sub{font-size:17px;fill:var(--muted);font-weight:600}
+.doom-modes{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.doom-modes button,.doom-chips button{background:var(--raised);color:var(--muted);border:1px solid var(--line);border-radius:var(--r-s);padding:5px 9px;font:500 .85rem var(--body);cursor:pointer}
+.doom-modes button.on{color:var(--text);border-color:var(--purple)}
+.doom-modes b{color:var(--text);font-weight:600}
+.doom-modes .adj{display:inline-flex;gap:2px;margin-left:auto;align-items:center}
+.doom-modes .adj .muted{font-size:.8rem;margin-right:4px}
+.doom-modes .adj button{min-width:34px}
+.doom-info{margin:4px 0;min-height:3em}
+.doom-chips{display:flex;flex-wrap:wrap;gap:5px}
+.doom-chips button{border-left:4px solid var(--tc);color:var(--text);font-family:var(--display);font-weight:700;font-size:.95rem;padding:3px 8px}
+.doom-chips button i{font-style:normal;color:var(--muted);font-weight:500;margin-right:5px}
+.doom-chips button.on{background:#3a2a52;border-color:var(--purple);border-left-color:var(--tc)}
+.doom-chips button.hitby{color:var(--red)}
+.doom-chips button em{font-style:normal;color:#ff4fd8;font-size:.75rem}
+.doom-foot{font-size:.75rem;margin:4px 0 0}
+@media (max-width:860px){.doom{grid-template-columns:minmax(0,1fr)}.doom svg{grid-row:auto}}
+@media (prefers-reduced-motion:reduce){.doom g.car{transition:none}}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="home-head"><h1>Circle of Doom</h1>
+  {% if deadlines %}<p class="next">Next deadline: <b>{{ deadlines[0].ev_name }}, {{ deadlines[0].name }}</b>
+    <time data-countdown="{{ deadlines[0].start_utc }}">{{ deadlines[0].start_utc|localtime }}</time></p>{% endif %}
+</div>
+<section class="panel doomcard" aria-label="Circle of Doom">
+  <header class="panel-head"><div><h2>{{ race.ev_name if race else 'Gaps on a one-lap clock' }}</h2>
+    <p class="muted">Every car by its time gap to the leader; one turn is one lap. Tap a driver to see where a pit stop now puts him.</p></div></header>
+  <p class="muted pad doom-wait">{% if race %}Live during the {{ race.name|lower }}, from {{ race.start_utc|localtime }}.{% else %}Live during races and sprints.{% endif %}</p>
+  <div id="doom-slot"></div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/app.js?v={{ ASSET_V }}"></script>{% endblock %}
