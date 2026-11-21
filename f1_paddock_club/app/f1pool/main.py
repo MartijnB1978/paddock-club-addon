@@ -1336,6 +1336,19 @@ def admin_report_pdf(request: Request, year: int, rnd: int, kind: str, html: int
         "Content-Disposition": f'inline; filename="{reports.filename(kind, year, rnd)}"'})
 
 
+# Review drafts: public, unlisted, not indexed. Not part of the game.
+DRAFTS = {"justsaypizza-me5uihud": "justsaypizza.html"}
+
+
+@app.get("/draft/{slug}", response_class=HTMLResponse)
+def draft(slug: str):
+    name = DRAFTS.get(slug)
+    if not name:
+        return Response(status_code=404)
+    return FileResponse(HERE / "drafts" / name, media_type="text/html",
+                        headers={"X-Robots-Tag": "noindex, nofollow", "Cache-Control": "no-cache"})
+
+
 @app.get("/healthz")
 def healthz():
     return JSONResponse({"ok": True, "version": engine.version})
