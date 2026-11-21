@@ -33,7 +33,7 @@ main{width:100%;max-width:1180px;margin:0 auto;padding:24px 16px 48px;flex:1}
 .brand-mark{width:34px;height:20px;fill:var(--text)}
 .brand-mark .pole{fill:var(--purple)}
 .nav{display:flex;gap:4px;flex-wrap:wrap}
-.nav a{padding:6px 10px;border-radius:var(--r-s);text-decoration:none;color:var(--muted);font-weight:500}
+.nav a{white-space:nowrap;padding:6px 10px;border-radius:var(--r-s);text-decoration:none;color:var(--muted);font-weight:500}
 .nav a:hover{color:var(--text)}
 .nav a.on{color:var(--text);box-shadow:inset 0 -2px 0 var(--purple)}
 .who{margin-left:auto;display:flex;align-items:center;gap:12px}
@@ -374,7 +374,7 @@ section + section{margin-top:28px}
 .doom .arc{fill:none;stroke-width:14;stroke-opacity:.45;stroke-linecap:round}
 .doom .band{fill:none;stroke:var(--amber);stroke-width:20;stroke-opacity:.25}
 .doom .ghost circle{fill:none;stroke-width:3;stroke-dasharray:4 3}
-.doom g.car{cursor:pointer;transition:transform 1.8s linear}
+.doom g.car{cursor:pointer;transition:transform var(--doom-t,1.8s) linear}
 .doom g.car .hit{fill:transparent}
 .doom g.car .dot{stroke:#141821;stroke-width:2}
 .doom g.car .lead{stroke:#4a5568;stroke-width:1}
@@ -408,3 +408,18 @@ section + section{margin-top:28px}
 .doom-foot{font-size:.75rem;margin:4px 0 0}
 @media (max-width:860px){.doom{grid-template-columns:minmax(0,1fr)}.doom svg{grid-row:auto}}
 @media (prefers-reduced-motion:reduce){.doom g.car{transition:none}}
+/* replay controls */
+.doomcard+.doomcard{margin-top:20px}
+.rp-ctrl{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px}
+.rp-ctrl label{flex:1 1 220px}
+.rp-ctrl .rp-lapl{flex:0 0 110px}
+.rp-speed{display:inline-flex;gap:2px}
+.rp-speed button{background:var(--raised);color:var(--muted);border:1px solid var(--line);border-radius:var(--r-s);padding:8px 12px;font:600 .9rem var(--body);cursor:pointer}
+.rp-speed button.on{color:var(--text);border-color:var(--purple)}
+#rp-go{min-width:84px;padding:10px 16px}
+#rp-go.on{background:var(--red);color:#fff}
+.rp-bar{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.rp-bar input{flex:1;padding:0;border:0;background:none;accent-color:var(--purple)}
+.rp-time{font-variant-numeric:tabular-nums;font-size:.85rem;white-space:nowrap}
+.rp-msg:empty{display:none}
+#replay.loading .rp-bar{opacity:.4}

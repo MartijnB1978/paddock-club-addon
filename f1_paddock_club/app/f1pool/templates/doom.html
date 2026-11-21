@@ -10,5 +10,27 @@
   <p class="muted pad doom-wait">{% if race %}Live during the {{ race.name|lower }}, from {{ race.start_utc|localtime }}.{% else %}Live during races and sprints.{% endif %}</p>
   <div id="doom-slot"></div>
 </section>
+<section class="panel doomcard" id="replay" aria-label="Replay an earlier race">
+  <header class="panel-head"><div><h2>Replay</h2>
+    <p class="muted">Watch an earlier race or sprint of this season on the circle.</p></div></header>
+  {% if replays %}
+  <div class="rp-ctrl">
+    <label>Race<select id="rp-race">
+      <option value="">Choose a race</option>
+      {% for r in replays %}<option value="{{ r.id }}">{{ r.ev_name }}{{ ' (sprint)' if r.kind == 'S' }}</option>{% endfor %}
+    </select></label>
+    <label class="rp-lapl">Start at lap<input id="rp-lap" type="number" min="1" value="1" inputmode="numeric"></label>
+    <div class="rp-speed" role="group" aria-label="Speed">
+      <button type="button" data-speed="1" class="on" aria-pressed="true">1×</button><button type="button" data-speed="2" aria-pressed="false">2×</button><button type="button" data-speed="5" aria-pressed="false">5×</button>
+    </div>
+    <button type="button" id="rp-go" class="btn small">Start</button>
+  </div>
+  <div class="rp-bar"><input id="rp-pos" type="range" min="0" max="0" value="0" aria-label="Position in the race"><span class="rp-time muted"></span></div>
+  <p class="muted rp-msg" aria-live="polite"></p>
+  <div id="replay-slot"></div>
+  {% else %}
+  <p class="muted pad">Replays appear here once this season has a race or sprint with F1 timing data.</p>
+  {% endif %}
+</section>
 {% endblock %}
 {% block scripts %}<script src="/static/app.js?v={{ ASSET_V }}"></script>{% endblock %}

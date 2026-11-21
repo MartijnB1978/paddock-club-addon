@@ -58,7 +58,7 @@ def pit_loss(data):
     return DEFAULT_LOSS, names[1] or names[0]
 
 
-def lap_reference(lines):
+def lap_reference(lines, fallback=90.0):
     """Typical current lap time: median of the latest laps of cars on track (pit laps left out)."""
     laps = []
     for ln in lines.values():
@@ -68,20 +68,20 @@ def lap_reference(lines):
         if t and 40 < t < 300:
             laps.append(t)
     if len(laps) < 3:
-        return 90.0
+        return fallback
     med = statistics.median(laps)
     laps = [t for t in laps if t < med * 1.1] or laps     # a slow lap (traffic, damage) must not skew it
     return round(statistics.median(laps), 3)
 
 
-def build(data, num2info, flag_kind=None):
+def build(data, num2info, flag_kind=None, lap_hint=90.0):
     """Circle data for the browser.
 
     num2info: {racing number: {'tla', 'colour'}} (feed DriverList merged with our entrants).
     Returns {'lap': s, 'loss': {'green','vsc','sc'}, 'mode', 'circuit', 'cars': [...]} with cars in
     running order; 'gap' is the time behind the leader (laps down included, so it can exceed a lap)."""
     lines = ((data.get("TimingData") or {}).get("Lines")) or {}
-    lap = lap_reference(lines)
+    lap = lap_reference(lines, lap_hint)
     rows = []
     for num, ln in lines.items():
         if not isinstance(ln, dict):

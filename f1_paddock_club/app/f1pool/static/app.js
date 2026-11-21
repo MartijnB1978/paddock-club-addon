@@ -339,11 +339,10 @@
   }
   mountMap();
 
-  // Circle of Doom (members only): gaps to the leader on a one-lap clock, pit stop forecast on tap
-  var doom = null, doomTimer = null, doomData = null, doomSel = null, doomMode = null, doomAdj = 0;
-  try { doomSel = sessionStorage.getItem("doomSel"); doomAdj = Number(localStorage.getItem("doomAdj")) || 0; } catch (e) {}
+  // Circle of Doom (members only): gaps to the leader on a one-lap clock, pit stop forecast on tap.
+  // One drawing routine for the live circle and for race replays.
   var R = 150, MODES = {green: "Green flag", vsc: "VSC", sc: "Safety car"};
-  function ang(gap, lap) { var f = (gap % lap) / lap; return f * 2 * Math.PI; }
+  function ang(gap, lap) { return ((gap % lap) / lap) * 2 * Math.PI; }
   function xy(a, r) { return [r * Math.sin(a), -r * Math.cos(a)]; }
   function fmtLap(s) { var m = Math.floor(s / 60); return m + ":" + (s - m * 60).toFixed(1).padStart(4, "0"); }
   function arcPath(a0, a1, r) {
@@ -352,155 +351,237 @@
     return "M" + p0[0].toFixed(1) + " " + p0[1].toFixed(1) + " A" + r + " " + r + " 0 " + (span > Math.PI ? 1 : 0) +
       " 1 " + p1[0].toFixed(1) + " " + p1[1].toFixed(1);
   }
-  function mountDoom() {
-    var slot = document.getElementById("doom-slot");
-    if (!slot) { if (doomTimer) { clearInterval(doomTimer); doomTimer = null; } return; }
-    if (!doom) {
-      doom = document.createElement("div");
-      doom.className = "doom";
-      doom.hidden = true;
-      doom.innerHTML = '<svg viewBox="-215 -215 430 430" role="img" aria-label="Circle of Doom: cars placed by time gap to the leader">' +
-        '<circle class="ring" r="' + R + '"></circle><line class="start" x1="0" y1="' + (-R - 12) + '" x2="0" y2="' + (-R + 12) + '"></line>' +
-        '<g class="win"></g><g class="cars"></g><g class="mid"></g></svg>' +
-        '<div class="doom-modes" role="group" aria-label="Pit loss scenario"></div>' +
-        '<p class="doom-info" aria-live="polite"></p><div class="doom-chips" role="group" aria-label="Choose a driver"></div>' +
-        '<p class="note muted doom-foot"></p>';
-      doom.addEventListener("click", function (e) {
-        var m = e.target.closest("[data-mode]"), d = e.target.closest("[data-tla]"), a = e.target.closest("[data-adj]");
-        if (m) { doomMode = m.dataset.mode; }
-        else if (a) { doomAdj = a.dataset.adj === "0" ? 0 : Math.round((doomAdj + Number(a.dataset.adj)) * 10) / 10;
-          try { localStorage.setItem("doomAdj", doomAdj); } catch (x) {} }
-        else if (d) { doomSel = doomSel === d.dataset.tla ? null : d.dataset.tla;
-          try { doomSel ? sessionStorage.setItem("doomSel", doomSel) : sessionStorage.removeItem("doomSel"); } catch (x) {} }
-        else return;
-        drawDoom();
+  function store(kind, key, val) {
+    try { var st = kind === "s" ? sessionStorage : localStorage; if (val === undefined) return st.getItem(key);
+      if (val === null) st.removeItem(key); else st.setItem(key, val); } catch (e) {}
+    return null;
+  }
+  function Doom(key) {
+    var self = {data: null, sel: store("s", key), mode: null, lastMode: null}, adj = Number(store("l", "doomAdj")) || 0;
+    var el = document.createElement("div");
+    el.className = "doom";
+    el.innerHTML = '<svg viewBox="-215 -215 430 430" role="img" aria-label="Circle of Doom: cars placed by time gap to the leader">' +
+      '<circle class="ring" r="' + R + '"></circle><line class="start" x1="0" y1="' + (-R - 12) + '" x2="0" y2="' + (-R + 12) + '"></line>' +
+      '<g class="win"></g><g class="cars"></g><g class="mid"></g></svg>' +
+      '<div class="doom-modes" role="group" aria-label="Pit loss scenario"></div>' +
+      '<p class="doom-info" aria-live="polite"></p><div class="doom-chips" role="group" aria-label="Choose a driver"></div>' +
+      '<p class="note muted doom-foot"></p>';
+    self.el = el;
+    el.addEventListener("click", function (e) {
+      var m = e.target.closest("[data-mode]"), d = e.target.closest("[data-tla]"), a = e.target.closest("[data-adj]");
+      if (m) self.mode = m.dataset.mode;
+      else if (a) { adj = a.dataset.adj === "0" ? 0 : Math.round((adj + Number(a.dataset.adj)) * 10) / 10; store("l", "doomAdj", adj); }
+      else if (d) { self.sel = self.sel === d.dataset.tla ? null : d.dataset.tla; store("s", key, self.sel); }
+      else return;
+      self.draw();
+    });
+    el.addEventListener("keydown", function (e) {
+      var g = e.target.closest && e.target.closest("g.car");
+      if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); g.dispatchEvent(new MouseEvent("click", {bubbles: true})); }
+    });
+    self.draw = function (d, secs) {
+      if (d) self.data = d;
+      d = self.data; if (!d) return;
+      if (secs) el.style.setProperty("--doom-t", secs + "s");
+      if (self.lastMode !== null && self.lastMode !== d.mode) self.mode = null;   // track status changed: follow it
+      self.lastMode = d.mode;
+      var svg = el.querySelector("svg"), cg = svg.querySelector(".cars"), wg = svg.querySelector(".win"), mg = svg.querySelector(".mid");
+      var lap = d.lap, mode = self.mode || d.mode, loss = Math.max(0, d.loss[mode] + adj), me = null, sel = self.sel;
+      d.cars.forEach(function (c) { if (c.tla === sel) me = c; });
+      var fc = null;
+      if (me) {
+        var t = me.gap + loss, ahead = null, behind = null, passed = [], pos = 1;
+        d.cars.forEach(function (c) {
+          if (c === me) return;
+          if (c.gap <= t) { pos++; if (!ahead || c.gap > ahead.gap) ahead = c; } else if (!behind || c.gap < behind.gap) behind = c;
+          if (c.gap > me.gap && c.gap <= t) passed.push(c);
+        });
+        fc = {t: t, pos: pos, ahead: ahead, behind: behind, passed: passed};
+      }
+      var hit = {}; if (fc) fc.passed.forEach(function (c) { hit[c.tla] = 1; });
+      while (wg.firstChild) wg.removeChild(wg.firstChild);
+      if (fc) {
+        var a0 = ang(me.gap, lap), a1 = ang(fc.t, lap);
+        if (loss >= lap) a1 = a0 + 2 * Math.PI - 0.001;
+        wg.appendChild(svgEl("path", {d: arcPath(a0, a1, R), "class": "arc", stroke: me.c}));
+        var band = Math.min(1.0, lap / 4) / lap * 2 * Math.PI;   // ±1 s: the forecast is never exact
+        wg.appendChild(svgEl("path", {d: arcPath(a1 - band, a1 + band, R), "class": "band"}));
+        var g = xy(a1, R), gh = svgEl("g", {"class": "ghost", transform: "translate(" + g[0].toFixed(1) + " " + g[1].toFixed(1) + ")"});
+        gh.appendChild(svgEl("circle", {r: 10, stroke: me.c}));
+        wg.appendChild(gh);
+      }
+      var lanes = [R + 24, R + 46, R - 26, R + 68, R - 48], last = lanes.map(function () { return -9; }), seen = {};
+      d.cars.slice().sort(function (x, y) { return ang(x.gap, lap) - ang(y.gap, lap); }).forEach(function (c) {
+        var a = ang(c.gap, lap), lane = 0;
+        while (lane < lanes.length - 1 && a - last[lane] < 0.16) lane++;
+        last[lane] = a;
+        var car = cg.querySelector('[data-tla="' + c.tla + '"]'), fresh = !car;
+        if (fresh) {
+          car = svgEl("g", {"class": "car", "data-tla": c.tla, tabindex: "0", role: "button"});
+          car.appendChild(svgEl("line", {"class": "lead"}));
+          car.appendChild(svgEl("circle", {"class": "hit", r: 16}));
+          car.appendChild(svgEl("circle", {"class": "dot", r: 7}));
+          car.appendChild(svgEl("text", {"class": "lbl"}));
+          car.style.transition = "none";
+        }
+        var p = xy(a, R), l = xy(a, lanes[lane]);
+        car.style.transform = "translate(" + p[0].toFixed(1) + "px," + p[1].toFixed(1) + "px)";
+        var ln = car.querySelector(".lead");
+        ln.setAttribute("x2", (l[0] - p[0]).toFixed(1)); ln.setAttribute("y2", (l[1] - p[1]).toFixed(1));
+        car.querySelector(".dot").setAttribute("fill", c.c);
+        var tx = car.querySelector(".lbl");
+        tx.setAttribute("x", (l[0] - p[0]).toFixed(1)); tx.setAttribute("y", (l[1] - p[1] + 4).toFixed(1));
+        tx.textContent = c.tla;
+        car.setAttribute("aria-label", "P" + c.p + " " + c.tla + (c.p > 1 ? ", " + c.gap.toFixed(1) + " s behind the leader" : ", leader") + (c.pit ? ", in the pits" : ""));
+        car.classList.toggle("pit", c.pit);
+        car.classList.toggle("sel", c.tla === sel);
+        car.classList.toggle("hitby", !!hit[c.tla]);
+        car.classList.toggle("dim", !!fc && c !== me && !hit[c.tla] && c !== fc.ahead && c !== fc.behind);
+        cg.appendChild(car);
+        if (fresh) { car.getBoundingClientRect(); car.style.transition = ""; }
+        seen[c.tla] = 1;
       });
-    }
-    slot.replaceWith(doom);
-    if (!doomTimer) { pollDoom(); doomTimer = setInterval(pollDoom, 2000); }
-  }
-  function pollDoom() {
-    if (document.hidden || !doom) return;
-    fetch("/live/circle", {cache: "no-store", credentials: "same-origin"})
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        var wait = document.querySelector(".doom-wait");
-        if (wait) wait.hidden = !!d.live;
-        doom.hidden = !d.live;
-        if (!d.live) return;
-        if (doomData && doomData.mode !== d.mode) doomMode = null;   // track status changed: follow it again
-        doomData = d; drawDoom();
-      }).catch(function () {});
-  }
-  function drawDoom() {
-    var d = doomData; if (!d || !doom) return;
-    var svg = doom.querySelector("svg"), cg = svg.querySelector(".cars"), wg = svg.querySelector(".win"), mg = svg.querySelector(".mid");
-    var lap = d.lap, mode = doomMode || d.mode, loss = Math.max(0, d.loss[mode] + doomAdj);
-    var me = null;
-    d.cars.forEach(function (c) { if (c.tla === doomSel) me = c; });
-    // forecast for the chosen driver
-    var fc = null;
-    if (me) {
-      var t = me.gap + loss, ahead = null, behind = null, passed = [], pos = 1;
+      Array.prototype.slice.call(cg.children).forEach(function (x) { if (!seen[x.getAttribute("data-tla")]) cg.removeChild(x); });
+      while (mg.firstChild) mg.removeChild(mg.firstChild);
+      function mid(y, txt, cls) { var t = svgEl("text", {x: 0, y: y, "class": cls}); t.textContent = txt; mg.appendChild(t); }
+      if (fc) { mid(-6, me.tla, "big"); mid(22, "P" + me.p + " → P" + fc.pos, "sub"); }
+      else if (d.centre) { mid(-4, d.centre[0], "sub"); mid(22, d.centre[1], "big2"); }
+      else { mid(-4, "One lap", "sub"); mid(20, fmtLap(lap), "big2"); }
+      var html = "";
+      Object.keys(MODES).forEach(function (k) {
+        html += '<button type="button" data-mode="' + k + '" aria-pressed="' + (k === mode) + '" class="' + (k === mode ? "on" : "") + '">' +
+          MODES[k] + " <b>" + Math.max(0, d.loss[k] + adj).toFixed(1) + " s</b>" + (k === d.mode ? " ·&nbsp;now" : "") + "</button>";
+      });
+      html += '<span class="adj"><span class="muted">Pit loss</span><button type="button" data-adj="-0.5" aria-label="Pit loss half a second less">−</button>' +
+        '<button type="button" data-adj="0" title="Reset">' + (adj ? (adj > 0 ? "+" : "") + adj.toFixed(1) + " s" : "±") + '</button>' +
+        '<button type="button" data-adj="0.5" aria-label="Pit loss half a second more">+</button></span>';
+      el.querySelector(".doom-modes").innerHTML = html;
+      var info = el.querySelector(".doom-info");
+      if (!fc) info.textContent = "Tap a driver on the circle or below.";
+      else if (me.pit) info.textContent = me.tla + " is in the pits now.";
+      else {
+        var s = me.tla + " pits now (" + MODES[mode].toLowerCase() + ", " + loss.toFixed(1) + " s): rejoins P" + fc.pos;
+        if (fc.ahead) s += ", " + (fc.t - fc.ahead.gap).toFixed(1) + " s behind " + fc.ahead.tla;
+        if (fc.behind) s += (fc.ahead ? " and " : ", ") + (fc.behind.gap - fc.t).toFixed(1) + " s ahead of " + fc.behind.tla;
+        s += ". " + (fc.passed.length ? "Passed by " + fc.passed.map(function (c) { return c.tla; }).join(", ") + "." : "Keeps his position.");
+        if (fc.passed.length) {
+          var close = fc.passed[fc.passed.length - 1], need = fc.t - close.gap + 0.1;
+          if (need <= 5) s += " With " + need.toFixed(1) + " s more on " + close.tla + " he would rejoin ahead of him.";
+        }
+        if (me.tyre) s += " On " + me.tyre.c + "s, " + me.tyre.age + " laps old, " + me.stops + (me.stops === 1 ? " stop" : " stops") + " so far.";
+        info.textContent = s;
+      }
+      var ch = "";
       d.cars.forEach(function (c) {
-        if (c === me) return;
-        if (c.gap <= t) { pos++; if (!ahead || c.gap > ahead.gap) ahead = c; } else if (!behind || c.gap < behind.gap) behind = c;
-        if (c.gap > me.gap && c.gap <= t) passed.push(c);
+        ch += '<button type="button" data-tla="' + c.tla + '" style="--tc:' + c.c + '" aria-pressed="' + (c.tla === sel) + '" class="' +
+          (c.tla === sel ? "on " : "") + (hit[c.tla] ? "hitby " : "") + (c.pit ? "pit" : "") + '"><i>' + c.p + "</i>" + c.tla + (c.pit ? " <em>PIT</em>" : "") + "</button>";
       });
-      fc = {t: t, pos: pos, ahead: ahead, behind: behind, passed: passed};
-    }
-    var hit = {}; if (fc) fc.passed.forEach(function (c) { hit[c.tla] = 1; });
-    // pit window: arc from the car to where it rejoins, ghost car at the rejoin point
-    while (wg.firstChild) wg.removeChild(wg.firstChild);
-    if (fc) {
-      var a0 = ang(me.gap, lap), a1 = ang(fc.t, lap);
-      if (loss >= lap) a1 = a0 + 2 * Math.PI - 0.001;
-      wg.appendChild(svgEl("path", {d: arcPath(a0, a1, R), "class": "arc", stroke: me.c}));
-      var band = Math.min(1.0, lap / 4) / lap * 2 * Math.PI;   // ±1 s: the forecast is never exact
-      wg.appendChild(svgEl("path", {d: arcPath(a1 - band, a1 + band, R), "class": "band"}));
-      var g = xy(a1, R), gh = svgEl("g", {"class": "ghost", transform: "translate(" + g[0].toFixed(1) + " " + g[1].toFixed(1) + ")"});
-      gh.appendChild(svgEl("circle", {r: 10, stroke: me.c}));
-      wg.appendChild(gh);
-    }
-    // cars, labels staggered over lanes so close cars stay readable
-    var lanes = [R + 24, R + 46, R - 26, R + 68, R - 48], last = lanes.map(function () { return -9; }), seen = {};
-    var order = d.cars.slice().sort(function (a, b) { return ang(a.gap, lap) - ang(b.gap, lap); });
-    order.forEach(function (c) {
-      var a = ang(c.gap, lap), lane = 0;
-      while (lane < lanes.length - 1 && a - last[lane] < 0.16) lane++;
-      last[lane] = a;
-      var el = cg.querySelector('[data-tla="' + c.tla + '"]'), fresh = !el;
-      if (fresh) {
-        el = svgEl("g", {"class": "car", "data-tla": c.tla, tabindex: "0", role: "button"});
-        el.appendChild(svgEl("line", {"class": "lead"}));
-        el.appendChild(svgEl("circle", {"class": "hit", r: 16}));
-        el.appendChild(svgEl("circle", {"class": "dot", r: 7}));
-        el.appendChild(svgEl("text", {"class": "lbl"}));
-        el.style.transition = "none";
-        el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.dispatchEvent(new MouseEvent("click", {bubbles: true})); } });
-      }
-      var p = xy(a, R), l = xy(a, lanes[lane]);
-      el.style.transform = "translate(" + p[0].toFixed(1) + "px," + p[1].toFixed(1) + "px)";
-      var ln = el.querySelector(".lead");
-      ln.setAttribute("x2", (l[0] - p[0]).toFixed(1)); ln.setAttribute("y2", (l[1] - p[1]).toFixed(1));
-      var dot = el.querySelector(".dot");
-      dot.setAttribute("fill", c.c);
-      var tx = el.querySelector(".lbl");
-      tx.setAttribute("x", (l[0] - p[0]).toFixed(1)); tx.setAttribute("y", (l[1] - p[1] + 4).toFixed(1));
-      tx.textContent = c.tla;
-      el.setAttribute("aria-label", "P" + c.p + " " + c.tla + (c.p > 1 ? ", " + c.gap.toFixed(1) + " s behind the leader" : ", leader") + (c.pit ? ", in the pits" : ""));
-      el.classList.toggle("pit", c.pit);
-      el.classList.toggle("sel", c.tla === doomSel);
-      el.classList.toggle("hitby", !!hit[c.tla]);
-      el.classList.toggle("dim", !!fc && c !== me && !hit[c.tla] && c !== fc.ahead && c !== fc.behind);
-      cg.appendChild(el);
-      if (fresh) { el.getBoundingClientRect(); el.style.transition = ""; }
-      seen[c.tla] = 1;
-    });
-    Array.prototype.slice.call(cg.children).forEach(function (el) { if (!seen[el.getAttribute("data-tla")]) cg.removeChild(el); });
-    // centre text
-    while (mg.firstChild) mg.removeChild(mg.firstChild);
-    function mid(y, txt, cls) { var t = svgEl("text", {x: 0, y: y, "class": cls}); t.textContent = txt; mg.appendChild(t); }
-    if (fc) { mid(-6, me.tla, "big"); mid(22, "P" + me.p + " → P" + fc.pos, "sub"); }
-    else { mid(-4, "One lap", "sub"); mid(20, fmtLap(lap), "big2"); }
-    // scenario buttons
-    var mb = doom.querySelector(".doom-modes"), html = "";
-    Object.keys(MODES).forEach(function (k) {
-      html += '<button type="button" data-mode="' + k + '" aria-pressed="' + (k === mode) + '" class="' + (k === mode ? "on" : "") + '">' +
-        MODES[k] + " <b>" + Math.max(0, d.loss[k] + doomAdj).toFixed(1) + " s</b>" + (k === d.mode ? " ·&nbsp;now" : "") + "</button>";
-    });
-    html += '<span class="adj"><span class="muted">Pit loss</span><button type="button" data-adj="-0.5" aria-label="Pit loss half a second less">−</button>' +
-      '<button type="button" data-adj="0" title="Reset">' + (doomAdj ? (doomAdj > 0 ? "+" : "") + doomAdj.toFixed(1) + " s" : "±") + '</button>' +
-      '<button type="button" data-adj="0.5" aria-label="Pit loss half a second more">+</button></span>';
-    mb.innerHTML = html;
-    // forecast text
-    var info = doom.querySelector(".doom-info");
-    if (!fc) info.textContent = "Tap a driver on the circle or below.";
-    else if (me.pit) info.textContent = me.tla + " is in the pits now.";
-    else {
-      var s = me.tla + " pits now (" + MODES[mode].toLowerCase() + ", " + loss.toFixed(1) + " s): rejoins P" + fc.pos;
-      if (fc.ahead) s += ", " + (fc.t - fc.ahead.gap).toFixed(1) + " s behind " + fc.ahead.tla;
-      if (fc.behind) s += (fc.ahead ? " and " : ", ") + (fc.behind.gap - fc.t).toFixed(1) + " s ahead of " + fc.behind.tla;
-      s += ". ";
-      s += fc.passed.length ? "Passed by " + fc.passed.map(function (c) { return c.tla; }).join(", ") + "." : "Keeps his position.";
-      if (fc.passed.length) {
-        var close = fc.passed[fc.passed.length - 1], need = fc.t - close.gap + 0.1;
-        if (need <= 5) s += " With " + need.toFixed(1) + " s more on " + close.tla + " he would rejoin ahead of him.";
-      }
-      if (me.tyre) s += " On " + me.tyre.c + "s, " + me.tyre.age + " laps old, " + me.stops + (me.stops === 1 ? " stop" : " stops") + " so far.";
-      info.textContent = s;
-    }
-    // driver chips in running order
-    var ch = doom.querySelector(".doom-chips"), ch_html = "";
-    d.cars.forEach(function (c) {
-      ch_html += '<button type="button" data-tla="' + c.tla + '" style="--tc:' + c.c + '" aria-pressed="' + (c.tla === doomSel) + '" class="' +
-        (c.tla === doomSel ? "on " : "") + (hit[c.tla] ? "hitby " : "") + (c.pit ? "pit" : "") + '"><i>' + c.p + "</i>" + c.tla + (c.pit ? " <em>PIT</em>" : "") + "</button>";
-    });
-    ch.innerHTML = ch_html;
-    doom.querySelector(".doom-foot").textContent = "One turn = " + fmtLap(lap) + " (typical current lap). Pit loss is a typical figure" +
-      (d.circuit ? " for " + d.circuit : "") + "; adjust it with − and + if this race shows otherwise." + (d.out.length ? " Out: " + d.out.join(", ") + "." : "");
+      el.querySelector(".doom-chips").innerHTML = ch;
+      el.querySelector(".doom-foot").textContent = "One turn = " + fmtLap(lap) + " (typical current lap). Pit loss is a typical figure" +
+        (d.circuit ? " for " + d.circuit : "") + "; adjust it with − and + if this race shows otherwise." + (d.out && d.out.length ? " Out: " + d.out.join(", ") + "." : "");
+    };
+    return self;
   }
-  mountDoom();
+
+  // live circle
+  var liveSlot = document.getElementById("doom-slot");
+  if (liveSlot) {
+    var live = Doom("doomSel"), liveWait = document.querySelector(".doom-wait");
+    live.el.hidden = true;
+    liveSlot.replaceWith(live.el);
+    var pollLive = function () {
+      if (document.hidden) return;
+      fetch("/live/circle", {cache: "no-store", credentials: "same-origin"})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (liveWait) liveWait.hidden = !!d.live;
+          live.el.hidden = !d.live;
+          if (d.live) live.draw(d, 1.8);
+        }).catch(function () {});
+    };
+    pollLive(); setInterval(pollLive, 2000);
+  }
+
+  // replays of earlier races: start / stop, start lap, speed 1x 2x 5x
+  var rbox = document.getElementById("replay");
+  if (rbox) {
+    var rsel = rbox.querySelector("#rp-race"), rlap = rbox.querySelector("#rp-lap"), rpos = rbox.querySelector("#rp-pos"),
+        rgo = rbox.querySelector("#rp-go"), rmsg = rbox.querySelector(".rp-msg"), rtime = rbox.querySelector(".rp-time");
+    var rep = null, pos = 0, shown = -1, playing = false, speed = 1, rdoom = Doom("replaySel"), loadId = 0;
+    rdoom.el.hidden = true;
+    rbox.querySelector("#replay-slot").replaceWith(rdoom.el);
+    var hms = function (t) { var h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = Math.floor(t % 60);
+      return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0"); };
+    var frame = function (i) {
+      var f = rep.frames[i], dr = rep.drivers;
+      return {lap: f.ref, circuit: rep.circuit, mode: f.mode, loss: rep.loss, out: f.out,
+        centre: [f.flag || "Race time " + hms(f.t), "Lap " + f.lap + (f.total ? "/" + f.total : "")],
+        cars: f.cars.map(function (x) {
+          return {tla: dr[x[0]].tla, c: dr[x[0]].c, p: x[1], gap: x[2], pit: !!x[3], stops: x[4],
+            tyre: x[5] ? {c: x[5], age: x[6]} : null};
+        })};
+    };
+    var show = function (force) {
+      var i = Math.min(rep.frames.length - 1, Math.max(0, Math.floor(pos)));
+      if (i === shown && !force) return;
+      shown = i;
+      rdoom.draw(frame(i), playing ? Math.min(1.8, rep.step / speed) : 0.3);
+      rpos.value = i;
+      rtime.textContent = "Lap " + rep.frames[i].lap + " · " + hms(rep.frames[i].t);
+    };
+    var setPlaying = function (on) {
+      playing = on && !!rep;
+      rgo.textContent = playing ? "Stop" : "Start";
+      rgo.classList.toggle("on", playing);
+    };
+    var seekLap = function () {
+      if (!rep) return;
+      var want = parseInt(rlap.value, 10) || 1, best = 0;
+      Object.keys(rep.laps).forEach(function (l) { if (Number(l) <= want && Number(l) >= best) best = Number(l); });
+      pos = rep.laps[String(best)] || 0; show(true);
+    };
+    var load = function () {
+      var sid = rsel.value, my = ++loadId;
+      setPlaying(false); rep = null; rdoom.el.hidden = true; rbox.classList.add("loading");
+      if (!sid) { rmsg.textContent = ""; return; }
+      rmsg.textContent = "Loading…";
+      var attempt = function () {
+        fetch("/replay/" + sid, {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
+          if (my !== loadId) return;
+          if (d.frames) {
+            rep = d; rbox.classList.remove("loading"); rmsg.textContent = "";
+            rpos.max = d.frames.length - 1; rlap.max = d.frames[d.frames.length - 1].lap || 99;
+            rdoom.el.hidden = false; seekLap();
+          } else if (d.status === "building") {
+            rmsg.textContent = "Building this replay from F1's timing archive. The first time takes a minute or two.";
+            setTimeout(attempt, 4000);
+          } else rmsg.textContent = d.msg || "Replay not available.";
+        }).catch(function () { if (my === loadId) rmsg.textContent = "No connection, try again."; });
+      };
+      attempt();
+    };
+    rsel.addEventListener("change", load);
+    rlap.addEventListener("change", seekLap);
+    rpos.addEventListener("input", function () { if (rep) { pos = Number(rpos.value); show(true); } });
+    rgo.addEventListener("click", function () {
+      if (!rep) return;
+      if (!playing && Math.floor(pos) >= rep.frames.length - 1) seekLap();
+      setPlaying(!playing);
+    });
+    rbox.querySelectorAll("[data-speed]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        speed = Number(b.dataset.speed);
+        rbox.querySelectorAll("[data-speed]").forEach(function (x) { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
+      });
+    });
+    setInterval(function () {
+      if (!playing || !rep) return;
+      pos += 0.25 * speed / rep.step;
+      if (pos >= rep.frames.length - 1) { pos = rep.frames.length - 1; setPlaying(false); }
+      show();
+    }, 250);
+    if (rsel.value) load();
+  }
 
   // live standings: server-sent events -> refresh board with FLIP animation
   var board = document.getElementById("board");
