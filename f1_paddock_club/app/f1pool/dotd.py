@@ -141,9 +141,10 @@ def match_driver(name, entrants):
 
 def event_words(ev):
     """Words that identify a Grand Prix in a headline or URL, e.g. {'sao paulo', 'brazil'}."""
+    ev = dict(ev) if ev else {}        # the engine passes sqlite3.Row, which has no .get()
     words = set()
     for f in ("name", "location", "country"):
-        w = " ".join(t for t in _plain((ev or {}).get(f) or "").split() if t not in GENERIC)
+        w = " ".join(t for t in _plain(ev.get(f) or "").split() if t not in GENERIC)
         if len(w) >= 4:
             words.add(w)
     return words
