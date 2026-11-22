@@ -101,20 +101,42 @@
     });
   });
 
+  // Live updates via /stream, which sends the server's data version. onChange runs when the version
+  // differs from the last one seen; comparing versions (rather than skipping the first message) also
+  // catches up after a reconnect. Phones (iOS especially) pause or silently kill the stream when the
+  // screen locks or the app goes to the background, so on return we refresh and open a fresh stream.
+  function watchStream(onChange) {
+    var es = null, seen = null;
+    function connect() {
+      if (es) es.close();
+      es = new EventSource("/stream");
+      es.onmessage = function (e) {
+        if (seen !== null && e.data !== seen) onChange();
+        seen = e.data;
+      };
+      es.onerror = function () {
+        if (es.readyState === EventSource.CLOSED) setTimeout(connect, 5000);   // browser gave up: retry
+      };
+    }
+    function resume() { onChange(); connect(); }
+    connect();
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) resume(); });
+    window.addEventListener("pageshow", function (e) { if (e.persisted) resume(); });
+  }
+
   // live F1 standings page: refresh tables on every change
   var f1 = document.getElementById("f1live");
   if (f1 && window.EventSource) {
-    var f1first = true, f1busy = false;
-    var es1 = new EventSource("/stream");
-    es1.onmessage = function () {
-      if (f1first) { f1first = false; return; }
-      if (f1busy) return; f1busy = true;
+    var f1busy = false, f1again = false;
+    watchStream(function f1refresh() {
+      if (f1busy) { f1again = true; return; }
+      f1busy = true; f1again = false;
       var sx = Array.prototype.map.call(f1.querySelectorAll(".grid-wrap"), function (g) { return g.scrollLeft; });
       fetch(f1.dataset.url, {cache: "no-store"}).then(function (r) { return r.text(); }).then(function (html) {
         f1.innerHTML = html; if (window.pcClockTick) window.pcClockTick();
         f1.querySelectorAll(".grid-wrap").forEach(function (g, i) { g.scrollLeft = sx[i] || 0; });
-      }).finally(function () { f1busy = false; });
-    };
+      }).catch(function () {}).finally(function () { f1busy = false; if (f1again) f1refresh(); });
+    });
   }
 
   // chat: poll for new messages, send text/photo/video with upload progress
@@ -259,16 +281,15 @@
   // live standings page: refresh on every change, keep the track map element alive
   var livebox = document.getElementById("live");
   if (livebox && window.EventSource) {
-    var lfirst = true, lbusy = false;
-    var esl = new EventSource("/stream");
-    esl.onmessage = function () {
-      if (lfirst) { lfirst = false; return; }
-      if (lbusy) return; lbusy = true;
+    var lbusy = false, lagain = false;
+    watchStream(function lrefresh() {
+      if (lbusy) { lagain = true; return; }
+      lbusy = true; lagain = false;
       fetch(livebox.dataset.url, {cache: "no-store"}).then(function (r) { return r.text(); }).then(function (html) {
         if (map && map.parentNode) map.parentNode.removeChild(map);
         livebox.innerHTML = html; if (window.pcClockTick) window.pcClockTick(); mountMap();
-      }).finally(function () { lbusy = false; });
-    };
+      }).catch(function () {}).finally(function () { lbusy = false; if (lagain) lrefresh(); });
+    });
   }
 
   // live track map: one persistent element, moved into the slot after every board refresh
@@ -586,14 +607,15 @@
   // live standings: server-sent events -> refresh board with FLIP animation
   var board = document.getElementById("board");
   if (!board || !window.EventSource) return;
-  var year = board.dataset.year, busy = false, first = true;
+  var year = board.dataset.year, busy = false, again = false;
   function positions() {
     var m = {};
     board.querySelectorAll(".row").forEach(function (r) { m[r.dataset.id] = r.getBoundingClientRect().top; });
     return m;
   }
   function refresh() {
-    if (busy) return; busy = true;
+    if (busy) { again = true; return; }   // a change came in mid-fetch: fetch once more afterwards
+    busy = true; again = false;
     var before = positions();
     fetch("/fragment/board?year=" + year, {cache: "no-store"}).then(function (r) { return r.text(); })
       .then(function (html) {
@@ -608,8 +630,7 @@
                     {duration: 700, easing: "cubic-bezier(.2,.8,.2,1)"});
           if (dy > 0) r.classList.add("flash-up");
         });
-      }).finally(function () { busy = false; });
+      }).catch(function () {}).finally(function () { busy = false; if (again) refresh(); });
   }
-  var es = new EventSource("/stream");
-  es.onmessage = function () { if (first) { first = false; return; } refresh(); };
+  watchStream(refresh);
 })();
