@@ -16,14 +16,15 @@ PAD = 400          # feed units of margin around the track
 
 
 def outline(key, year):
-    """{'x': [...], 'y': [...], 'rotation': deg} or None; cached in settings (also a miss, for an hour)."""
+    """{'x': [...], 'y': [...], 'rotation': deg, 'corners': [{'n', 'x', 'y'}]} or None; cached in settings
+    (also a miss, for an hour)."""
     if not key:
         return None
     ck = f"track:{key}:{year}"
     hit = db.setting(ck)
     if hit:
         d = json.loads(hit)
-        if d.get("x"):
+        if d.get("x") and "corners" in d:
             return d
         if d.get("miss_at", 0) > db.now_utc().timestamp() - 3600:
             return None
@@ -33,9 +34,17 @@ def outline(key, year):
                          headers={"User-Agent": "PaddockClubReeuwijk/1.0"})
         j = r.json() if r.ok else {}
         if j.get("x") and j.get("y"):
-            d = {"x": j["x"], "y": j["y"], "rotation": float(j.get("rotation") or 0)}
+            corners = []
+            for c in j.get("corners") or []:
+                tp = c.get("trackPosition") or {}
+                if tp.get("x") is not None and c.get("number") is not None:
+                    corners.append({"n": f"{c['number']}{c.get('letter') or ''}", "x": float(tp["x"]),
+                                    "y": float(tp["y"])})
+            d = {"x": j["x"], "y": j["y"], "rotation": float(j.get("rotation") or 0), "corners": corners}
     except (requests.RequestException, ValueError) as exc:
         log.debug("circuit %s: %s", key, exc)
+    if not d.get("x") and hit and json.loads(hit).get("x"):
+        return json.loads(hit)              # refresh for the corners failed: keep the outline we had
     db.set_setting(ck, json.dumps(d))
     return d if d.get("x") else None
 

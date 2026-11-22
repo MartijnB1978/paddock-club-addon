@@ -10,34 +10,18 @@ import logging
 import threading
 from pathlib import Path
 
-from . import circle, db
+from . import circle, db, pitloss
 from . import livetiming as lt
 
 log = logging.getLogger("replay")
 STEP = 4.0                       # seconds of race time between two pictures
-VERSION = 1                      # bump when the file format changes; older files are rebuilt
+VERSION = 2                      # bump when the file format changes; older files are rebuilt
 TOPICS = ["DriverList", "SessionInfo", "SessionStatus", "LapCount", "TrackStatus", "TimingData", "TimingAppData"]
 _building = {}                   # session id -> 'building' | error text
 _lock = threading.Lock()
 
 
-def _stamp(s):
-    h, m, sec = s.split(":")
-    return int(h) * 3600 + int(m) * 60 + float(sec)
-
-
-def parse_timed(text):
-    """[(seconds, message)] from a .jsonStream file ('HH:MM:SS.mmm{...}' per line)."""
-    out = []
-    for line in text.lstrip("﻿").splitlines():
-        line = line.strip().lstrip("﻿")
-        if len(line) < 13 or line[2] != ":":
-            continue
-        try:
-            out.append((_stamp(line[:12]), json.loads(line[12:])))
-        except (ValueError, IndexError):
-            continue
-    return out
+parse_timed = lt.parse_timed
 
 
 def _tagged(topic, text):
@@ -62,6 +46,7 @@ def frames(streams, info_db):
     pending = next(events, None)
     drivers, index, out = [], {}, []
     loss = circuit = None
+    measured = False
     nxt = start
     while nxt <= end:
         while pending is not None and pending[0] <= nxt:
@@ -69,7 +54,7 @@ def frames(streams, info_db):
             pending = next(events, None)
         data = st.data
         if loss is None and data.get("SessionInfo"):
-            g, circuit = circle.pit_loss(data)
+            g, circuit, measured = circle.pit_loss(data)
             loss = {m: round(g * f, 1) for m, f in circle.FACTOR.items()}
         info = dict(info_db)
         for num, d in lt.driver_info(data).items():
@@ -92,7 +77,7 @@ def frames(streams, info_db):
     laps = {}
     for i, f in enumerate(out):
         laps.setdefault(str(f["lap"]), i)
-    return {"v": VERSION, "step": STEP, "circuit": circuit, "loss": loss or
+    return {"v": VERSION, "step": STEP, "circuit": circuit, "measured": measured, "loss": loss or
             {m: round(circle.DEFAULT_LOSS * f, 1) for m, f in circle.FACTOR.items()},
             "drivers": drivers, "laps": laps, "frames": out}
 
@@ -140,6 +125,11 @@ def _build(http, data_dir, sid):
             raise RuntimeError(f"F1 timing archive not available ({http.last_status or 'no answer'})")
         info = {str(e["number"]): {"tla": e["tla"], "colour": e["colour"]}
                 for e in db.q("SELECT number, tla, colour FROM entrants WHERE event_id=?", s["event_id"])}
+        st = lt.TimingState()
+        for m in lt.parse_stream(streams.get("SessionInfo") or ""):
+            st.apply("SessionInfo", m)
+        year = db.q1("SELECT year FROM events WHERE id=?", s["event_id"])["year"]
+        pitloss.ensure(http, lt.circuit_key(st.data), year, s["path"] if s["kind"] == "R" else None)
         rep = frames(streams, info)
         if not rep["frames"]:
             raise RuntimeError("no race data in the archive")
@@ -149,6 +139,9 @@ def _build(http, data_dir, sid):
         tmp = p.with_suffix(".tmp")
         tmp.write_bytes(gzip.compress(json.dumps(rep, separators=(",", ":")).encode(), 6))
         tmp.replace(p)
+        for old in p.parent.glob(f"{sid}-v*.json.gz"):
+            if old != p:
+                old.unlink(missing_ok=True)          # replay of an older file format
         db.logmsg("info", f"Circle of Doom replay ready for {rep['name']} ({len(rep['frames'])} frames)")
         with _lock:
             _building.pop(sid, None)

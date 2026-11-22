@@ -36,6 +36,27 @@
   </div>
 </section>
 
+{% if laps %}
+<section class="card" id="laps" aria-label="Lap comparison">
+  <div class="lc-head">
+    <div><h2>Lap comparison</h2>
+      <p class="muted small">From F1's car telemetry. Move over the charts or the map to compare the two laps at any point.</p></div>
+    <div class="lc-tabs" role="group" aria-label="Choose the lap">
+      {% for s in laps %}<button type="button" data-sid="{{ s.id }}" aria-pressed="{{ 'true' if loop.last else 'false' }}"{% if loop.last %} class="on"{% endif %}>{{ lap_kinds[s.kind] }}</button>{% endfor %}
+    </div>
+  </div>
+  <p class="muted lc-msg" aria-live="polite">Loading telemetry…</p>
+  <div class="lc-body" hidden>
+    <div class="lc-who"></div>
+    <div class="lc-grid">
+      <div class="lc-map"></div>
+      <div class="lc-charts"><div class="lc-read" aria-live="off"></div><div class="lc-svg"></div></div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <h2>Predictions</h2>
 {{ pred_grid(rows, fields, visible, me, drivers, teams) }}
 {% endblock %}
+{% block scripts %}{% if laps %}<script src="/static/laps.js?v={{ ASSET_V }}" defer></script>{% endif %}{% endblock %}

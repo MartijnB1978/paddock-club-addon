@@ -4,12 +4,15 @@ One full turn of the circle is one lap (the field's typical current lap time). T
 twelve o'clock; a car 30 s behind on a 90 s lap sits a third of the way round. Pitting moves a car
 back by the pit loss, so where it lands on the circle shows where it rejoins and who passes it.
 
-Pit loss per circuit is a typical green-flag figure (pit lane at the speed limit versus a racing
-lap). Under a VSC or Safety Car the field drives slower, so a stop costs less."""
+Pit loss per circuit is measured from earlier races at the circuit (pitloss.py); the table below is the
+fallback when there is too little data. Under a VSC or Safety Car the field drives slower, so a stop
+costs less."""
 import re
 import statistics
 
-# green-flag pit loss in seconds, matched on the meeting's location / circuit / country (lower case)
+from . import pitloss
+
+# fallback green-flag pit loss in seconds, matched on the meeting's location / circuit / country (lower case)
 PIT_LOSS = [
     ("sakhir", 23), ("bahrain", 23), ("jeddah", 20), ("melbourne", 19), ("suzuka", 22), ("shanghai", 23),
     ("miami", 20), ("imola", 28), ("monaco", 19), ("monte carlo", 19), ("barcelona", 22), ("madrid", 22),
@@ -47,15 +50,21 @@ def _laps_down(v):
 
 
 def pit_loss(data):
-    """(green-flag pit loss in s, circuit name) for the session in the feed."""
+    """(green-flag pit loss in s, circuit name, measured?) for the session in the feed."""
     meet = (data.get("SessionInfo") or {}).get("Meeting") or {}
     names = [str(meet.get("Location") or ""), str((meet.get("Circuit") or {}).get("ShortName") or ""),
              str((meet.get("Country") or {}).get("Name") or ""), str(meet.get("Name") or "")]
+    try:
+        got = pitloss.measured((meet.get("Circuit") or {}).get("Key"))
+    except Exception:  # noqa: BLE001  (no database in tests, locked file): use the table
+        got = None
+    if got:
+        return float(got), names[1] or names[0], True
     hay = " | ".join(names).lower()
     for key, loss in PIT_LOSS:
         if re.search(r"\b" + re.escape(key), hay):
-            return float(loss), names[1] or names[0]
-    return DEFAULT_LOSS, names[1] or names[0]
+            return float(loss), names[1] or names[0], False
+    return DEFAULT_LOSS, names[1] or names[0], False
 
 
 def lap_reference(lines, fallback=90.0):
@@ -134,9 +143,9 @@ def build(data, num2info, flag_kind=None, lap_hint=90.0):
         cars.append(car)
         if not out:
             prev = car
-    loss, circuit = pit_loss(data)
+    loss, circuit, measured = pit_loss(data)
     mode = flag_kind if flag_kind in ("sc", "vsc") else "green"
-    return {"lap": lap, "circuit": circuit, "mode": mode,
+    return {"lap": lap, "circuit": circuit, "mode": mode, "measured": measured,
             "loss": {k: round(loss * f, 1) for k, f in FACTOR.items()},
             "cars": [c for c in cars if not c["out"]], "out": [c["tla"] for c in cars if c["out"]]}
 

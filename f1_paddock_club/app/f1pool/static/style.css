@@ -423,3 +423,34 @@ section + section{margin-top:28px}
 .rp-time{font-variant-numeric:tabular-nums;font-size:.85rem;white-space:nowrap}
 .rp-msg:empty{display:none}
 #replay.loading .rp-bar{opacity:.4}
+/* lap comparison (race page) */
+.lc-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.lc-head h2{margin-bottom:.2em}
+.lc-tabs{display:inline-flex;gap:2px;flex-wrap:wrap}
+.lc-tabs button{background:var(--raised);color:var(--muted);border:1px solid var(--line);border-radius:var(--r-s);padding:6px 12px;font:600 .9rem var(--body);cursor:pointer}
+.lc-tabs button.on{color:var(--text);border-color:var(--purple)}
+.lc-who,.lc-read{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;margin:10px 0}
+.lc-read{min-height:2.6em;font-size:.88rem;font-variant-numeric:tabular-nums;margin:0 0 4px}
+.lc-drv{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.lc-drv b{font-family:var(--display);font-size:1.05rem}
+.lc-drv i{display:inline-block;width:18px;height:3px;border-radius:2px;background:var(--tc)}
+.lc-drv.dash i{background:repeating-linear-gradient(90deg,var(--tc) 0 6px,transparent 6px 9px)}
+.lc-grid{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,2.4fr);gap:20px;align-items:start}
+.lc-map svg{width:100%;height:auto;max-height:420px;display:block;touch-action:none}
+.lc-map .lc-cn{fill:var(--muted);text-anchor:middle;font-weight:600;paint-order:stroke;stroke:#1d2330;stroke-width:6%}
+.lc-map .lc-start{fill:var(--text)}
+.lc-map .lc-dot{fill:var(--amber);stroke:#141821;stroke-width:1%}
+.lc-mapkey{margin:6px 0 0}
+.lc-svg{width:100%;touch-action:pan-y}
+.lc-plot{display:block;max-width:100%;height:auto}
+.lc-plot text{font:500 11px var(--body);fill:var(--muted)}
+.lc-plot .lc-lbl{font-weight:600;fill:var(--text)}
+.lc-plot .lc-tick.end{text-anchor:end}
+.lc-plot .lc-tick.mid,.lc-plot .lc-cn2{text-anchor:middle}
+.lc-plot .lc-cn2{font-size:10px}
+.lc-line{fill:none;stroke-width:2;stroke-linejoin:round}
+.lc-plot .lc-gl{stroke:#323b4d;stroke-width:1}
+.lc-plot .lc-zero{stroke:#8d97aa;stroke-width:1}
+.lc-plot .lc-corner{stroke:#323b4d;stroke-width:1;stroke-dasharray:2 3}
+.lc-plot .lc-cursor{stroke:var(--amber);stroke-width:1.5}
+@media (max-width:860px){.lc-grid{grid-template-columns:minmax(0,1fr)}.lc-map svg{max-height:300px}}

@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, bump, chat, circle, db, replay, push, dotd, fia, track, weather, importer, mailer, reports, scoring, standings
+from . import auth, bump, chat, circle, db, replay, push, dotd, fia, telemetry, track, weather, importer, mailer, reports, scoring, standings
 from .engine import Engine
 from .livetiming import car_positions as lt_positions, driver_info as lt_drivers
 from .schedule import DURATION, SCORED
@@ -129,7 +129,7 @@ templates.env.filters["chattext"] = lambda t: Markup(chat.render_text(t))
 templates.env.globals["wx_get"] = lambda eid: weather.get(eid)
 templates.env.globals["LABELS"] = scoring.LABELS
 # cache-busting: changes whenever the static files change, so browsers never use a stale stylesheet
-templates.env.globals["ASSET_V"] = int(max((HERE / "static" / f).stat().st_mtime for f in ("style.css", "app.js", "push.js")))
+templates.env.globals["ASSET_V"] = int(max((HERE / "static" / f).stat().st_mtime for f in ("style.css", "app.js", "push.js", "laps.js")))
 
 
 def current_user(request):
@@ -1018,7 +1018,22 @@ def race(request: Request, event_id: int):
     return render(request, "race.html", ev=ev, res=res, rows=rows, fields=fields, visible=visible, votes=votes,
                   me=u, drivers=driver_map(ev["year"]), teams=team_map(ev["year"]),
                   sessions=sessions_of(ev["id"]), year=ev["year"],
-                  season_preds=None)
+                  season_preds=None, laps=telemetry.sessions(ev["id"]), lap_kinds=telemetry.KINDS)
+
+
+@app.get("/laps/{sid}")
+def lap_compare(request: Request, sid: int):
+    """Pole / fastest lap comparison of a session (members only), built from F1 telemetry on first request."""
+    if not current_user(request):
+        return JSONResponse({"status": "login"}, status_code=401)
+    s = db.q1("SELECT event_id FROM sessions WHERE id=?", sid)
+    if not s or not any(r["id"] == sid for r in telemetry.sessions(s["event_id"])):
+        return JSONResponse({"status": "error", "msg": "No lap comparison for this session."})
+    state, body = telemetry.get(engine.http, DATA_DIR, sid)
+    if state == "ready":
+        return Response(body, media_type="application/json",
+                        headers={"Content-Encoding": "gzip", "Cache-Control": "private, max-age=86400"})
+    return JSONResponse({"status": state, "msg": body or ""})
 
 
 def _f1_context(year):

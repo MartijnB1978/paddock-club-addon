@@ -498,8 +498,9 @@
           (c.tla === sel ? "on " : "") + (hit[c.tla] ? "hitby " : "") + (c.pit ? "pit" : "") + '"><i>' + c.p + "</i>" + c.tla + (c.pit ? " <em>PIT</em>" : "") + "</button>";
       });
       el.querySelector(".doom-chips").innerHTML = ch;
-      el.querySelector(".doom-foot").textContent = "One turn = " + fmtLap(lap) + " (typical current lap). Pit loss is a typical figure" +
-        (d.circuit ? " for " + d.circuit : "") + "; adjust it with − and + if this race shows otherwise." + (d.out && d.out.length ? " Out: " + d.out.join(", ") + "." : "");
+      el.querySelector(".doom-foot").textContent = "One turn = " + fmtLap(lap) + " (typical current lap). Pit loss is " +
+        (d.measured ? "measured from recent races" : "a typical figure") +
+        (d.circuit ? " at " + d.circuit : "") + "; adjust it with − and + if this race shows otherwise." + (d.out && d.out.length ? " Out: " + d.out.join(", ") + "." : "");
     };
     return self;
   }
@@ -535,7 +536,7 @@
       return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0"); };
     var frame = function (i) {
       var f = rep.frames[i], dr = rep.drivers;
-      return {lap: f.ref, circuit: rep.circuit, mode: f.mode, loss: rep.loss, out: f.out,
+      return {lap: f.ref, circuit: rep.circuit, measured: rep.measured, mode: f.mode, loss: rep.loss, out: f.out,
         centre: [f.flag || "Race time " + hms(f.t), "Lap " + f.lap + (f.total ? "/" + f.total : "")],
         cars: f.cars.map(function (x) {
           return {tla: dr[x[0]].tla, c: dr[x[0]].c, p: x[1], gap: x[2], pit: !!x[3], stops: x[4],

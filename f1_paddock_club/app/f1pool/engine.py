@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from . import bump, chat, db, dotd, fia, livetiming as lt, official, scoring, mailer, track, weather
+from . import bump, chat, db, dotd, fia, livetiming as lt, official, pitloss, scoring, mailer, telemetry, track, weather
 from .f1auth import TokenManager
 from .schedule import DURATION, SCORED, NoCalendarData, sync as sync_schedule
 
@@ -27,6 +27,7 @@ RANK = {"admin": 4, "fia": 3, "official": 2}
 
 class Engine:
     def __init__(self, data_dir="/data"):
+        self.data_dir = data_dir
         self.tokens = TokenManager(Path(data_dir) / "f1_token.json")
         self.http = lt.F1Http(self.tokens)
         self.version = 0                 # bumped on every visible change (drives SSE)
@@ -193,6 +194,19 @@ class Engine:
             self.pitstop_poll(now)
         if self.due("reminders", 60):
             self.send_reminders(now)
+        if self.due("lap_compare", 1800):
+            self.warm_lap_compare(now)
+
+    # ------------------------------------------------------------ lap comparison
+    def warm_lap_compare(self, now):
+        """Build the pole / fastest lap comparison of sessions that finished in the last three days."""
+        if self.live:
+            return                      # big downloads wait until no session is running
+        for s in db.q("SELECT s.id FROM sessions s JOIN events e ON e.id=s.event_id WHERE e.cancelled=0 "
+                      "AND s.kind IN ('SQ','Q','R') AND s.status='final' AND s.path IS NOT NULL AND s.path<>'' "
+                      "AND s.start_utc BETWEEN ? AND ? ORDER BY s.start_utc",
+                      db.iso(now - timedelta(days=3)), db.iso(now - timedelta(hours=1))):
+            telemetry.warm(self.http, self.data_dir, s["id"])
 
     # ------------------------------------------------------------ reminders
     def send_reminders(self, now):
@@ -577,6 +591,8 @@ class Engine:
         circuit = (lt.circuit_key(data), year)
         if circuit != self.live_circuit and circuit[0]:
             threading.Thread(target=track.outline, args=circuit, daemon=True).start()   # warm the cache
+            # pit loss of the last seasons at this circuit, ready for the Circle of Doom on race day
+            threading.Thread(target=pitloss.ensure, args=(self.http, circuit[0], year), daemon=True).start()
         self.live_circuit = circuit
         if len(self.live_trace) < 6000:
             for x, y in lt.car_positions(data).values():
@@ -768,6 +784,10 @@ class Engine:
                       db.iso(ended), s["id"])
                 if first and s["status"] != "finished":
                     self.on_session_finished(s)
+                if first and s["kind"] == "R" and lt.circuit_key(st.data):
+                    year = db.q1("SELECT year FROM events WHERE id=?", s["event_id"])["year"]
+                    threading.Thread(target=pitloss.ensure, args=(self.http, lt.circuit_key(st.data), year, s["path"]),
+                                     daemon=True).start()
         # freeze events 48h after the race
         for ev in db.q("SELECT e.*, s.start_utc AS race_start, s.status AS race_status FROM events e "
                        "JOIN sessions s ON s.event_id=e.id AND s.kind='R' WHERE e.frozen=0 AND e.imported=0 "
