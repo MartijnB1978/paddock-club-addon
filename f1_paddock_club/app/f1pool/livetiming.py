@@ -427,18 +427,44 @@ def derive(kind, data, pit_events, drivers=None):
 
 
 # ------------------------------------------------------------- static -----
-def parse_stream(text):
+def split_line(line):
+    """(seconds, json text) from one .jsonStream line, or None.
+
+    Lines normally start with 'HH:MM:SS.mmm'. Some sessions use '[D]D.HH:MM:SS.mmm' instead, with a day
+    count in front (FastF1 issue #992); the days are added so the times stay in order."""
+    if len(line) < 13:
+        return None
+    days = 0
+    if line[2] != ":":
+        dot = line.find(".")
+        if dot < 1 or dot > 3 or not line[:dot].isdigit():
+            return None
+        days, line = int(line[:dot]), line[dot + 1:]
+        if len(line) < 13 or line[2] != ":":
+            return None
+    try:
+        h, m, sec = line[:12].split(":")
+        return days * 86400 + int(h) * 3600 + int(m) * 60 + float(sec), line[12:]
+    except ValueError:
+        return None
+
+
+def parse_timed(text):
+    """[(seconds, message)] from a .jsonStream file."""
     out = []
     for line in text.lstrip("﻿").splitlines():
-        line = line.strip().lstrip("﻿")
-        if len(line) < 13:
+        part = split_line(line.strip().lstrip("﻿"))
+        if not part:
             continue
-        body = line[12:]
         try:
-            out.append(json.loads(body) if body[0] == "{" else json.loads(body))
-        except (ValueError, IndexError):
+            out.append((part[0], json.loads(part[1])))
+        except ValueError:
             continue
     return out
+
+
+def parse_stream(text):
+    return [m for _t, m in parse_timed(text)]
 
 
 class F1Http:
