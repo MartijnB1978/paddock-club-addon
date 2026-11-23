@@ -4,7 +4,7 @@
 <section class="bump" aria-label="Players' {{ 'race' if bc.mode == 'race' else 'season' }} positions lap by lap">
   <header class="panel-head">
     <div><h2>Players lap by lap ({{ 'Race' if bc.mode == 'race' else 'Season' }})</h2>
-      <p class="muted"><a href="/race/{{ bc.ev.id }}">{{ bc.ev.name }}</a> · {% if bc.mode == 'race' %}points from this race's predictions only · {% endif %}{% if bc.finished %}start to final {{ 'result' if bc.mode == 'race' else 'standings' }}{% else %}lap {{ bc.current }}{% if bc.total %} of {{ bc.total }}{% endif %}{% endif %}</p></div>
+      <p class="muted"><a href="/race/{{ bc.ev.id }}">{{ bc.ev.name }}</a> · {% if bc.mode == 'race' %}points from this race's predictions only · {% endif %}{% if bc.finished %}start to final {{ 'result' if bc.mode == 'race' else 'standings' }}{% if bc.mode == 'race' %} · <a href="/race/{{ bc.ev.id }}#recap">race recap and lap comparison</a>{% endif %}{% else %}lap {{ bc.current }}{% if bc.total %} of {{ bc.total }}{% endif %}{% endif %}</p></div>
     {% if not bc.finished %}<span class="badge live-dot">Live</span>{% else %}<span class="badge">Race</span>{% endif %}
   </header>
   <div class="bump-grid" style="--row:{{ bc.row }}px;--n:{{ bc.n }}">

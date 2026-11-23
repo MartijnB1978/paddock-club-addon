@@ -454,3 +454,28 @@ section + section{margin-top:28px}
 .lc-plot .lc-corner{stroke:#323b4d;stroke-width:1;stroke-dasharray:2 3}
 .lc-plot .lc-cursor{stroke:var(--amber);stroke-width:1.5}
 @media (max-width:860px){.lc-grid{grid-template-columns:minmax(0,1fr)}.lc-map svg{max-height:300px}}
+/* race recap (race page) */
+#recap h3{margin:14px 0 4px;font-size:1rem}
+.rc-key{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin:0 0 6px}
+.rc-sw{display:inline-block;width:14px;height:10px;border-radius:3px;background:var(--tc);margin-right:-6px;vertical-align:-1px}
+.rc-sw.used{background:repeating-linear-gradient(45deg,var(--tc) 0 3px,#4a5263 3px 6px)}
+.rc-tyres,.rc-laps{width:100%;touch-action:pan-y}
+.rc-plot{display:block;max-width:100%;height:auto}
+.rc-plot text{font:500 11px var(--body);fill:var(--muted)}
+.rc-plot .rc-lbl{fill:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.rc-plot .end{text-anchor:end}
+.rc-plot .mid,.rc-plot .rc-in{text-anchor:middle}
+.rc-plot .rc-in{font-weight:700;font-size:10px}
+.rc-plot .rc-gl{stroke:#323b4d;stroke-width:1}
+.rc-line{fill:none;stroke-width:2;stroke-linejoin:round}
+.rc-plot .rc-cursor{stroke:var(--amber);stroke-width:1.5}
+.rc-plot .rc-dot{stroke:#141821;stroke-width:2}
+.rc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
+.rc-chip{display:inline-flex;align-items:center;gap:5px;background:var(--raised);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font:600 .82rem var(--body);cursor:pointer}
+.rc-chip i{width:12px;height:3px;border-radius:2px;background:var(--tc);opacity:.45}
+.rc-chip.dash i{background:repeating-linear-gradient(90deg,var(--tc) 0 4px,transparent 4px 6px)}
+.rc-chip.on{color:var(--text);border-color:var(--tc)}
+.rc-chip.on i{opacity:1}
+.rc-drv{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.rc-drv i{display:inline-block;width:18px;height:3px;border-radius:2px;background:var(--tc)}
+.rc-drv.dash i{background:repeating-linear-gradient(90deg,var(--tc) 0 6px,transparent 6px 9px)}
