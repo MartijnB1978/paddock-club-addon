@@ -36,6 +36,28 @@
   </div>
 </section>
 
+{% if recaps %}
+<section class="card" id="recap" aria-label="Race recap">
+  <div class="lc-head">
+    <div><h2>Race recap</h2>
+      <p class="muted small">Tyre strategy and lap times from F1's timing archive. Shaded laps: Safety Car, VSC or red flag.</p></div>
+    <div class="lc-tabs rc-tabs" role="group" aria-label="Choose the session">
+      {% for s in recaps %}<button type="button" data-sid="{{ s.id }}" aria-pressed="{{ 'true' if loop.last else 'false' }}"{% if loop.last %} class="on"{% endif %}>{{ recap_kinds[s.kind] }}</button>{% endfor %}
+    </div>
+  </div>
+  <p class="muted rc-msg" aria-live="polite">Loading the race recap…</p>
+  <div class="rc-body" hidden>
+    <h3>Tyre strategy</h3>
+    <p class="muted small rc-key"><span class="rc-sw" style="--tc:#e8002d"></span>Soft <span class="rc-sw" style="--tc:#ffd12e"></span>Medium <span class="rc-sw" style="--tc:#eceae4"></span>Hard <span class="rc-sw" style="--tc:#39b54a"></span>Intermediate <span class="rc-sw" style="--tc:#2b7bd0"></span>Wet <span class="rc-sw used" style="--tc:#8d97aa"></span>used set</p>
+    <div class="rc-tyres"></div>
+    <h3>Lap times</h3>
+    <div class="rc-chips" role="group" aria-label="Drivers to show"></div>
+    <div class="rc-read lc-read" aria-live="off"></div>
+    <div class="rc-laps"></div>
+  </div>
+</section>
+{% endif %}
+
 {% if laps %}
 <section class="card" id="laps" aria-label="Lap comparison">
   <div class="lc-head">
@@ -59,4 +81,4 @@
 <h2>Predictions</h2>
 {{ pred_grid(rows, fields, visible, me, drivers, teams) }}
 {% endblock %}
-{% block scripts %}{% if laps %}<script src="/static/laps.js?v={{ ASSET_V }}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if recaps %}<script src="/static/recap.js?v={{ ASSET_V }}" defer></script>{% endif %}{% if laps %}<script src="/static/laps.js?v={{ ASSET_V }}" defer></script>{% endif %}{% endblock %}

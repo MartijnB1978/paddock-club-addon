@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from . import bump, chat, db, dotd, fia, livetiming as lt, official, pitloss, scoring, mailer, telemetry, track, weather
+from . import bump, chat, db, dotd, fia, livetiming as lt, official, pitloss, recap, scoring, mailer, telemetry, track, weather
 from .f1auth import TokenManager
 from .schedule import DURATION, SCORED, NoCalendarData, sync as sync_schedule
 
@@ -199,14 +199,18 @@ class Engine:
 
     # ------------------------------------------------------------ lap comparison
     def warm_lap_compare(self, now):
-        """Build the pole / fastest lap comparison of sessions that finished in the last three days."""
+        """Build the lap comparison (SQ, Q, R) and race recap (S, R) of sessions that finished in the last
+        three days."""
         if self.live:
             return                      # big downloads wait until no session is running
-        for s in db.q("SELECT s.id FROM sessions s JOIN events e ON e.id=s.event_id WHERE e.cancelled=0 "
-                      "AND s.kind IN ('SQ','Q','R') AND s.status='final' AND s.path IS NOT NULL AND s.path<>'' "
+        for s in db.q("SELECT s.id, s.kind FROM sessions s JOIN events e ON e.id=s.event_id WHERE e.cancelled=0 "
+                      "AND s.kind IN ('SQ','Q','S','R') AND s.status='final' AND s.path IS NOT NULL AND s.path<>'' "
                       "AND s.start_utc BETWEEN ? AND ? ORDER BY s.start_utc",
                       db.iso(now - timedelta(days=3)), db.iso(now - timedelta(hours=1))):
-            telemetry.warm(self.http, self.data_dir, s["id"])
+            if s["kind"] in ("S", "R"):
+                recap.warm(self.http, self.data_dir, s["id"])
+            if s["kind"] in ("SQ", "Q", "R"):
+                telemetry.warm(self.http, self.data_dir, s["id"])
 
     # ------------------------------------------------------------ reminders
     def send_reminders(self, now):
